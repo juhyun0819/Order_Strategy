@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>여성복 의류 도매 - 대시보드</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="{{ url_for('static', filename='style.css') }}" rel="stylesheet">
+</head>
+<body>
+    <!-- 네비게이션 바 -->
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container">
+            <a class="navbar-brand" href="#">
+                <i class="fas fa-tshirt"></i> 여성복 의류 도매
+            </a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="/reset-db" onclick="return confirm('정말로 데이터베이스를 초기화하시겠습니까?')">
+                    <i class="fas fa-trash"></i> DB 초기화
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-4">
+        <!-- 업로드 안내 및 폼 -->
+        <div class="row mb-4 fade-in">
+            <div class="col-lg-6 offset-lg-3">
+                <div class="card shadow-sm mb-3" style="margin-top: 32px;">
+                    <div class="card-body">
+                        <h4 class="mb-3"><i class="fas fa-upload"></i> 엑셀 파일 업로드</h4>
+                        <ul class="mb-3">
+                            <li>여러 개의 엑셀 파일을 한 번에 업로드할 수 있습니다.</li>
+                            <li>파일명에 날짜(예: 25.06.29.xlsx)가 포함되어 있으면 자동으로 판매일자로 인식됩니다.</li>
+                            <li>필수 컬럼: <b>품명, 칼라, 사이즈, 실판매, 현재고, 미송잔량</b></li>
+                        </ul>
+                        <form method="POST" enctype="multipart/form-data" class="row g-3 mt-3">
+                            <div class="col-md-8">
+                                <input type="file" name="files" class="form-control" multiple accept=".xls,.xlsx">
+                            </div>
+                            <div class="col-md-4">
+                                <button type="submit" class="btn btn-primary w-100">엑셀 업로드</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 상품 선택/검색 카드 -->
+        <div class="row mb-4 slide-in">
+            <div class="col-lg-6 offset-lg-3">
+                <div class="card shadow-sm mb-3">
+                    <div class="card-body">
+                        <h5 class="mb-3"><i class="fas fa-box"></i> 상품 선택</h5>
+                        <form method="get" action="/dashboard">
+                            <label for="product" class="form-label">상품 선택</label>
+                            <div class="input-group">
+                                <select name="product" id="product" class="form-select">
+                                    <option value="">전체 상품</option>
+                                    {% for product in product_list %}
+                                        <option value="{{ product }}" {% if selected_product == product %}selected{% endif %}>{{ product }}</option>
+                                    {% endfor %}
+                                </select>
+                                <button type="submit" class="btn btn-primary">상품 선택</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 날짜별 데이터 삭제 카드 -->
+        {% if stats.sales_dates > 0 %}
+        <div class="row mb-4 slide-in">
+            <div class="col-lg-6 offset-lg-3">
+                <div class="card shadow-sm mb-3">
+                    <div class="card-body">
+                        <h5 class="mb-3"><i class="fas fa-calendar-times"></i> 날짜별 데이터 삭제</h5>
+                        <form method="post" action="/delete-date" class="row align-items-end">
+                            <div class="col-md-8">
+                                <label for="date" class="form-label">삭제할 날짜 선택</label>
+                                <select name="date" id="date" class="form-select" required>
+                                    <option value="">날짜를 선택하세요</option>
+                                    {% for date in unique_dates %}
+                                        <option value="{{ date }}">{{ date }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <button type="submit" class="btn btn-danger w-100" onclick="return confirm('정말로 이 날짜의 데이터를 삭제하시겠습니까?')">
+                                    <i class="fas fa-trash"></i> 선택한 날짜 데이터 삭제
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <!-- 통계 카드 -->
+        <div class="row mb-4 fade-in">
+            <div class="col-md-3">
+                <div class="stats-card p-4 text-center">
+                    <i class="fas fa-boxes stat-icon"></i>
+                    <h3 class="mt-2">{{ "{:,}".format(stats.total_items) }}</h3>
+                    <p class="text-muted mb-0">총 데이터 수</p>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card p-4 text-center">
+                    <i class="fas fa-chart-line stat-icon"></i>
+                    <h3 class="mt-2">{{ "{:,}".format(stats.total_sales) }}</h3>
+                    <p class="text-muted mb-0">총 판매량</p>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card p-4 text-center">
+                    <i class="fas fa-warehouse stat-icon"></i>
+                    <h3 class="mt-2">{{ "{:,}".format(stats.total_inventory) }}</h3>
+                    <p class="text-muted mb-0">총 현재고</p>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card p-4 text-center">
+                    <i class="fas fa-truck stat-icon"></i>
+                    <h3 class="mt-2">{{ "{:,}".format(stats.total_pending) }}</h3>
+                    <p class="text-muted mb-0">총 미송잔량</p>
+                </div>
+            </div>
+        </div>
+
+        {% if not selected_product %}
+            <!-- 알림/파레토/상품별 그래프/파레토 분석 등 전체 상품용 섹션 -->
+            {% if alert_df is not none and not alert_df.empty %}
+            <div class="row mb-4 fade-in">
+                <div class="col-12">
+                    <h4 class="mb-3"><i class="fas fa-exclamation-triangle"></i> 재고 예측/발주 알림</h4>
+                    <div class="alert-card">
+                        <div class="alert-table-container">
+                            <table class="table table-hover alert-table" id="alertTable">
+                                <thead>
+                                    <tr>
+                                        <th class="sortable-header" data-sort="date">날짜
+                                            <div class="sort-arrows">
+                                                <i class="fas fa-chevron-up sort-arrow" data-direction="asc"></i>
+                                                <i class="fas fa-chevron-down sort-arrow" data-direction="desc"></i>
+                                            </div>
+                                        </th>
+                                        <th class="sortable-header" data-sort="product">상품명
+                                            <div class="sort-arrows">
+                                                <i class="fas fa-chevron-up sort-arrow" data-direction="asc"></i>
+                                                <i class="fas fa-chevron-down sort-arrow" data-direction="desc"></i>
+                                            </div>
+                                        </th>
+                                        <th class="sortable-header" data-sort="trend">최근 판매 경향
+                                            <div class="sort-arrows">
+                                                <i class="fas fa-chevron-up sort-arrow" data-direction="asc"></i>
+                                                <i class="fas fa-chevron-down sort-arrow" data-direction="desc"></i>
+                                            </div>
+                                        </th>
+                                        <th class="sortable-header" data-sort="baseline">중간선
+                                            <div class="sort-arrows">
+                                                <i class="fas fa-chevron-up sort-arrow" data-direction="asc"></i>
+                                                <i class="fas fa-chevron-down sort-arrow" data-direction="desc"></i>
+                                            </div>
+                                        </th>
+                                        <th class="sortable-header" data-sort="current">현재고
+                                            <div class="sort-arrows">
+                                                <i class="fas fa-chevron-up sort-arrow" data-direction="asc"></i>
+                                                <i class="fas fa-chevron-down sort-arrow" data-direction="desc"></i>
+                                            </div>
+                                        </th>
+                                        <th class="sortable-header" data-sort="shortage">부족수량
+                                            <div class="sort-arrows">
+                                                <i class="fas fa-chevron-up sort-arrow" data-direction="asc"></i>
+                                                <i class="fas fa-chevron-down sort-arrow" data-direction="desc"></i>
+                                            </div>
+                                        </th>
+                                        <th class="sortable-header" data-sort="order">발주제안
+                                            <div class="sort-arrows">
+                                                <i class="fas fa-chevron-up sort-arrow" data-direction="asc"></i>
+                                                <i class="fas fa-chevron-down sort-arrow" data-direction="desc"></i>
+                                            </div>
+                                        </th>
+                                        <th class="sortable-header" data-sort="depletion">소진예상일
+                                            <div class="sort-arrows">
+                                                <i class="fas fa-chevron-up sort-arrow" data-direction="asc"></i>
+                                                <i class="fas fa-chevron-down sort-arrow" data-direction="desc"></i>
+                                            </div>
+                                        </th>
+                                        <th class="sortable-header" data-sort="alert">경고등급
+                                            <div class="sort-arrows">
+                                                <i class="fas fa-chevron-up sort-arrow" data-direction="asc"></i>
+                                                <i class="fas fa-chevron-down sort-arrow" data-direction="desc"></i>
+                                            </div>
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for _, row in alert_df.iterrows() %}
+                                    <tr>
+                                        <td data-sort-value="{{ row['날짜'] }}">{{ row['날짜'] }}</td>
+                                        <td data-sort-value="{{ row['상품명'] }}">{{ row['상품명'] }}</td>
+                                        <td data-sort-value="{{ row['최근 판매 경향'] }}">
+                                            {% if row['최근 판매 경향'] == '증가' %}
+                                                <span class="badge bg-success">증가</span>
+                                            {% elif row['최근 판매 경향'] == '감소' %}
+                                                <span class="badge bg-danger">감소</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary">유지</span>
+                                            {% endif %}
+                                        </td>
+                                        <td data-sort-value="{{ row['중간선'] }}">{{ row['중간선'] }}</td>
+                                        <td data-sort-value="{{ row['현재고'] }}">{{ row['현재고'] }}</td>
+                                        <td data-sort-value="{{ row['부족수량'] }}">
+                                            {% if row['부족수량'] > 0 %}
+                                                <span class="badge bg-warning">{{ row['부족수량'] }}</span>
+                                            {% else %}
+                                                <span class="badge bg-success">0</span>
+                                            {% endif %}
+                                        </td>
+                                        <td data-sort-value="{{ row['발주제안'] }}">{{ row['발주제안'] }}</td>
+                                        <td data-sort-value="{{ row['소진예상일'] }}">{{ row['소진예상일'] }}</td>
+                                        <td data-sort-value="{{ row['경고등급'] }}">
+                                            {% if row['경고등급'] == '위험' %}
+                                                <span class="badge bg-danger">위험</span>
+                                            {% elif row['경고등급'] == '주의' %}
+                                                <span class="badge bg-warning">주의</span>
+                                            {% else %}
+                                                <span class="badge bg-success">안정</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if a_grade_alert_df is not none and not a_grade_alert_df.empty %}
+            <div class="row mb-4 fade-in">
+                <div class="col-12">
+                    <h4 class="mb-3"><i class="fas fa-star"></i> A급(파레토) + 소진임박(7일 이하) 상품 발주 제안</h4>
+                    <div class="alert-card">
+                        <div class="alert-table-container">
+                            <table class="table table-hover alert-table" id="aGradeTable">
+                                <thead>
+                                    <tr>
+                                        <th class="sortable-header" data-sort="date">날짜
+                                            <div class="sort-arrows">
+                                                <i class="fas fa-chevron-up sort-arrow" data-direction="asc"></i>
+                                                <i class="fas fa-chevron-down sort-arrow" data-direction="desc"></i>
+                                            </div>
+                                        </th>
+                                        <th class="sortable-header" data-sort="product">상품명
+                                            <div class="sort-arrows">
+                                                <i class="fas fa-chevron-up sort-arrow" data-direction="asc"></i>
+                                                <i class="fas fa-chevron-down sort-arrow" data-direction="desc"></i>
+                                            </div>
+                                        </th>
+                                        <th class="sortable-header" data-sort="current">현재고
+                                            <div class="sort-arrows">
+                                                <i class="fas fa-chevron-up sort-arrow" data-direction="asc"></i>
+                                                <i class="fas fa-chevron-down sort-arrow" data-direction="desc"></i>
+                                            </div>
+                                        </th>
+                                        <th class="sortable-header" data-sort="avg7">최근7일평균판매
+                                            <div class="sort-arrows">
+                                                <i class="fas fa-chevron-up sort-arrow" data-direction="asc"></i>
+                                                <i class="fas fa-chevron-down sort-arrow" data-direction="desc"></i>
+                                            </div>
+                                        </th>
+                                        <th class="sortable-header" data-sort="depletion">소진예상일
+                                            <div class="sort-arrows">
+                                                <i class="fas fa-chevron-up sort-arrow" data-direction="asc"></i>
+                                                <i class="fas fa-chevron-down sort-arrow" data-direction="desc"></i>
+                                            </div>
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for _, row in a_grade_alert_df.iterrows() %}
+                                    <tr>
+                                        <td data-sort-value="{{ row['날짜'] }}">{{ row['날짜'] }}</td>
+                                        <td data-sort-value="{{ row['상품명'] }}">{{ row['상품명'] }}</td>
+                                        <td data-sort-value="{{ row['현재고'] }}">{{ row['현재고'] }}</td>
+                                        <td data-sort-value="{{ row['최근7일평균판매'] }}">{{ row['최근7일평균판매'] }}</td>
+                                        <td data-sort-value="{{ row['소진예상일'] }}">{{ row['소진예상일'] }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- 알림 및 예측 섹션 -->
+            {% if plots %}
+            <div class="row mb-4 fade-in">
+                <div class="col-md-6">
+                    <h4 class="chart-title"><i class="fas fa-chart-line"></i> 일별 판매 트렌드</h4>
+                    <div class="chart-container">
+                        <img src="data:image/png;base64,{{ plots.sales_trend }}" class="chart-img" alt="판매 트렌드">
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <h4 class="chart-title"><i class="fas fa-chart-area"></i> 판매 예측</h4>
+                    <div class="forecast-container">
+                        <div class="forecast-table-container" id="forecastContainer">
+                            <div class="loading">
+                                <i class="fas fa-spinner fa-spin"></i> 예측 로딩 중...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- 상품별/컬러별/사이즈별 실판매 집계: 한 줄에 3개 col-md-4씩 배치 -->
+            <div class="row">
+                {% if plots.product_sales %}
+                <div class="col-md-4">
+                    <h4 class="chart-title"><i class="fas fa-chart-bar"></i> 상품별 실판매 집계</h4>
+                    <div class="chart-container mini-card">
+                        <img src="data:image/png;base64,{{ plots.product_sales }}" class="chart-img mini-img" alt="상품별 실판매">
+                    </div>
+                </div>
+                {% endif %}
+                {% if plots.color_sales %}
+                <div class="col-md-4">
+                    <h4 class="chart-title"><i class="fas fa-palette"></i> 컬러별 실판매 집계</h4>
+                    <div class="chart-container mini-card">
+                        <img src="data:image/png;base64,{{ plots.color_sales }}" class="chart-img mini-img" alt="컬러별 실판매">
+                    </div>
+                </div>
+                {% endif %}
+                {% if plots.size_sales %}
+                <div class="col-md-4">
+                    <h4 class="chart-title"><i class="fas fa-ruler"></i> 사이즈별 실판매 집계</h4>
+                    <div class="chart-container mini-card">
+                        <img src="data:image/png;base64,{{ plots.size_sales }}" class="chart-img mini-img" alt="사이즈별 실판매">
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- 파레토 분석 -->
+            <div class="row fade-in">
+                <div class="col-12">
+                    <h4><i class="fas fa-chart-pie"></i> 파레토 분석 (상위 20% 제품)</h4>
+                    <div class="chart-container">
+                        <img src="data:image/png;base64,{{ plots.pareto_analysis }}" class="chart-img" alt="파레토 분석">
+                    </div>
+                </div>
+            </div>
+
+            <!-- 주별/월별/년도별 판매량 그래프 -->
+            <div class="row fade-in">
+                {% if plots.weekly_sales_chart %}
+                <div class="col-md-6">
+                    <h4 class="chart-title"><i class="fas fa-calendar-week"></i> 주별 판매량</h4>
+                    <div class="chart-container mini-card">
+                        <img src="data:image/png;base64,{{ plots.weekly_sales_chart }}" class="chart-img mini-img" alt="주별 판매량">
+                    </div>
+                </div>
+                {% endif %}
+                {% if plots.yearly_sales_chart %}
+                <div class="col-md-6">
+                    <h4 class="chart-title"><i class="fas fa-calendar"></i> 년도별 판매량</h4>
+                    <div class="chart-container mini-card">
+                        <img src="data:image/png;base64,{{ plots.yearly_sales_chart }}" class="chart-img mini-img" alt="년도별 판매량">
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- 작년 데이터 기반 그래프들 -->
+            {% if last_year %}
+            <div class="row mb-4 fade-in">
+                <div class="col-md-4">
+                    <h4 class="chart-title"><i class="fas fa-chart-line"></i> {{ last_year }}년 일별 판매 트렌드</h4>
+                    <div class="chart-container mini-card">
+                        {% if plots.lastyear_daily_trend %}
+                        <img src="data:image/png;base64,{{ plots.lastyear_daily_trend }}" class="chart-img mini-img" alt="{{ last_year }}년 일별 판매 트렌드">
+                        {% else %}
+                        <div class="text-center text-muted">데이터 없음</div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <h4 class="chart-title"><i class="fas fa-calendar-week"></i> {{ last_year }}년 주별 판매 트렌드</h4>
+                    <div class="chart-container mini-card">
+                        {% if plots.lastyear_weekly_trend %}
+                        <img src="data:image/png;base64,{{ plots.lastyear_weekly_trend }}" class="chart-img mini-img" alt="{{ last_year }}년 주별 판매 트렌드">
+                        {% else %}
+                        <div class="text-center text-muted">데이터 없음</div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <h4 class="chart-title"><i class="fas fa-chart-area"></i> 판매 예측</h4>
+                    <div class="chart-container mini-card forecast-card">
+                        {% if plots.lastyear_forecast_table and plots.lastyear_forecast_table|length > 0 %}
+                        <div class="table-responsive">
+                            <table class="forecast-table">
+                                <thead><tr><th>날짜</th><th>예상 판매량</th><th>신뢰도</th></tr></thead>
+                                <tbody>
+                                {% for row in plots.lastyear_forecast_table %}
+                                <tr>
+                                    <td>{{ row.date }}</td>
+                                    <td>{{ row.predicted_sales }}</td>
+                                    <td><span class="badge bg-success">{{ row.confidence }}%</span></td>
+                                </tr>
+                                {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% else %}
+                        <div class="text-center text-muted">예측 데이터 없음</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+        {% else %}
+            <!-- 선택 상품용: 컬러/사이즈별 그래프, 해당 상품 판매 예측만 표시 -->
+            <div class="row mb-4 fade-in">
+                <div class="col-md-6">
+                    <h4 class="chart-title"><i class="fas fa-chart-line"></i> 일별 판매 트렌드</h4>
+                    <div class="chart-container">
+                        <img src="data:image/png;base64,{{ plots.sales_trend }}" class="chart-img" alt="판매 트렌드">
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <h4 class="chart-title"><i class="fas fa-chart-area"></i> 판매 예측</h4>
+                    <div class="forecast-container">
+                        <div class="forecast-table-container" id="forecastContainer">
+                            <div class="loading">
+                                <i class="fas fa-spinner fa-spin"></i> 예측 로딩 중...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="row">
+                {% if plots.color_sales %}
+                <div class="col-md-6">
+                    <h4 class="chart-title"><i class="fas fa-palette"></i> 컬러별 실판매 집계</h4>
+                    <div class="chart-container mini-card">
+                        <img src="data:image/png;base64,{{ plots.color_sales }}" class="chart-img mini-img" alt="컬러별 실판매">
+                    </div>
+                </div>
+                {% endif %}
+                {% if plots.size_sales %}
+                <div class="col-md-6">
+                    <h4 class="chart-title"><i class="fas fa-ruler"></i> 사이즈별 실판매 집계</h4>
+                    <div class="chart-container mini-card">
+                        <img src="data:image/png;base64,{{ plots.size_sales }}" class="chart-img mini-img" alt="사이즈별 실판매">
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- 선택 상품용 주별/월별/년도별 판매량 그래프 -->
+            <div class="row fade-in">
+                {% if plots.weekly_sales_chart %}
+                <div class="col-md-4">
+                    <h4 class="chart-title"><i class="fas fa-calendar-week"></i> 주별 판매량</h4>
+                    <div class="chart-container mini-card">
+                        <img src="data:image/png;base64,{{ plots.weekly_sales_chart }}" class="chart-img mini-img" alt="주별 판매량">
+                    </div>
+                </div>
+                {% endif %}
+                {% if plots.yearly_sales_chart %}
+                <div class="col-md-4">
+                    <h4 class="chart-title"><i class="fas fa-calendar"></i> 년도별 판매량</h4>
+                    <div class="chart-container mini-card">
+                        <img src="data:image/png;base64,{{ plots.yearly_sales_chart }}" class="chart-img mini-img" alt="년도별 판매량">
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 재고 부족 알림 로드
+        fetch('/api/inventory-alerts')
+            .then(response => response.json())
+            .then(data => {
+                const container = document.getElementById('alertsContainer');
+                if (data.alerts && data.alerts.length > 0) {
+                    let html = '<div class="table-responsive"><table class="table table-hover alert-table">';
+                    html += '<thead><tr><th>상품명</th><th>현재고</th><th>미송잔량</th><th>평균 일일 판매</th><th>잔여 일수</th></tr></thead><tbody>';
+                    
+                    data.alerts.forEach(alert => {
+                        html += `<tr>
+                            <td>${alert.product}</td>
+                            <td>${alert.current_stock}</td>
+                            <td>${alert.pending_stock}</td>
+                            <td>${alert.avg_daily_sales}</td>
+                            <td><span class="badge bg-warning">${alert.days_remaining}일</span></td>
+                        </tr>`;
+                    });
+                    
+                    html += '</tbody></table></div>';
+                    container.innerHTML = html;
+                } else {
+                    container.innerHTML = '<p class="mb-0">재고 부족 상품이 없습니다.</p>';
+                }
+            })
+            .catch(error => {
+                document.getElementById('alertsContainer').innerHTML = '<p class="mb-0 text-danger">알림 로드 중 오류가 발생했습니다.</p>';
+            });
+
+        // 판매 예측 로드
+        fetch(`/api/sales-forecast{% if selected_product %}?product={{ selected_product }}{% endif %}`)
+            .then(response => response.json())
+            .then(data => {
+                const container = document.getElementById('forecastContainer');
+                if (data.forecast && data.forecast.length > 0) {
+                    let html = '<div class="table-responsive" id="forecastTableWrap"><table class="forecast-table">';
+                    html += '<thead><tr><th>날짜</th><th>예상 판매량</th><th>신뢰도</th></tr></thead><tbody>';
+                    
+                    data.forecast.forEach(item => {
+                        const confidenceColor = item.confidence > 0.6 ? 'success' : item.confidence > 0.4 ? 'warning' : 'danger';
+                        html += `<tr>
+                            <td>${item.date}</td>
+                            <td>${item.predicted_sales}</td>
+                            <td><span class="badge bg-${confidenceColor}">${Math.round(item.confidence * 100)}%</span></td>
+                        </tr>`;
+                    });
+                    
+                    html += '</tbody></table></div>';
+                    container.innerHTML = html;
+                    // 애니메이션 클래스 추가
+                    const wrap = document.getElementById('forecastTableWrap');
+                    if (wrap) wrap.classList.add('table-fade-in');
+                } else {
+                    container.innerHTML = '<p class="mb-0">예측 데이터가 없습니다.</p>';
+                }
+            })
+            .catch(error => {
+                document.getElementById('forecastContainer').innerHTML = '<p class="mb-0 text-danger">예측 로드 중 오류가 발생했습니다.</p>';
+            });
+
+        // 페이지 로드 시 애니메이션 효과
+        document.addEventListener('DOMContentLoaded', function() {
+            const elements = document.querySelectorAll('.fade-in, .slide-in');
+            elements.forEach((element, index) => {
+                setTimeout(() => {
+                    element.style.opacity = '1';
+                    element.style.transform = 'translateY(0)';
+                }, index * 100);
+            });
+
+            // 테이블 정렬 기능 초기화 (여러 테이블 지원)
+            initializeTableSorting('alertTable');
+            initializeTableSorting('aGradeTable');
+        });
+
+        // 테이블 정렬 기능 (여러 테이블 지원)
+        function initializeTableSorting(tableId) {
+            const table = document.getElementById(tableId);
+            if (!table) return;
+
+            const headers = table.querySelectorAll('.sortable-header');
+            let currentSort = { column: null, direction: 'asc' };
+
+            headers.forEach(header => {
+                const arrows = header.querySelectorAll('.sort-arrow');
+                arrows.forEach(arrow => {
+                    arrow.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        const column = header.getAttribute('data-sort');
+                        const direction = this.getAttribute('data-direction');
+                        document.querySelectorAll(`#${tableId} .sort-arrow.active`).forEach(arrow => {
+                            arrow.classList.remove('active');
+                        });
+                        this.classList.add('active');
+                        sortTable(tableId, column, direction);
+                        currentSort = { column, direction };
+                    });
+                });
+            });
+        }
+
+        function sortTable(tableId, column, direction) {
+            const table = document.getElementById(tableId);
+            const tbody = table.querySelector('tbody');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            const headers = table.querySelectorAll('th');
+            let columnIndex = 0;
+            for (let i = 0; i < headers.length; i++) {
+                if (headers[i].getAttribute('data-sort') === column) {
+                    columnIndex = i;
+                    break;
+                }
+            }
+            rows.sort((a, b) => {
+                const aValue = a.cells[columnIndex].getAttribute('data-sort-value') || a.cells[columnIndex].textContent.trim();
+                const bValue = b.cells[columnIndex].getAttribute('data-sort-value') || b.cells[columnIndex].textContent.trim();
+                if (!isNaN(aValue) && !isNaN(bValue)) {
+                    return direction === 'asc' ? parseFloat(aValue) - parseFloat(bValue) : parseFloat(bValue) - parseFloat(aValue);
+                }
+                if (column.includes('date') || column.includes('depletion')) {
+                    const aDate = new Date(aValue);
+                    const bDate = new Date(bValue);
+                    return direction === 'asc' ? aDate - bDate : bDate - aDate;
+                }
+                return direction === 'asc' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
+            });
+            rows.forEach(row => tbody.appendChild(row));
+        }
+
+        // forecast-table(판매예측) 정렬 기능 동적 적용
+        function enableForecastTableSort() {
+            const wrap = document.getElementById('forecastTableWrap');
+            if (!wrap) return;
+            const table = wrap.querySelector('.forecast-table');
+            if (!table) return;
+            // 헤더에 정렬 기능 추가
+            const headers = table.querySelectorAll('th');
+            headers.forEach((header, idx) => {
+                if (idx === 0 || idx === 1) { // 날짜, 예상 판매량만 정렬
+                    header.classList.add('sortable-header');
+                    const sortDiv = document.createElement('div');
+                    sortDiv.className = 'sort-arrows';
+                    sortDiv.innerHTML = `
+                        <i class="fas fa-chevron-up sort-arrow" data-direction="asc"></i>
+                        <i class="fas fa-chevron-down sort-arrow" data-direction="desc"></i>
+                    `;
+                    header.appendChild(sortDiv);
+                    sortDiv.querySelectorAll('.sort-arrow').forEach(arrow => {
+                        arrow.addEventListener('click', function(e) {
+                            e.stopPropagation();
+                            const direction = this.getAttribute('data-direction');
+                            sortForecastTable(idx, direction);
+                        });
+                    });
+                }
+            });
+        }
+        function sortForecastTable(columnIndex, direction) {
+            const table = document.querySelector('#forecastTableWrap .forecast-table');
+            if (!table) return;
+            const tbody = table.querySelector('tbody');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            rows.sort((a, b) => {
+                const aValue = a.cells[columnIndex].textContent.trim();
+                const bValue = b.cells[columnIndex].textContent.trim();
+                if (!isNaN(aValue) && !isNaN(bValue)) {
+                    return direction === 'asc' ? parseFloat(aValue) - parseFloat(bValue) : parseFloat(bValue) - parseFloat(aValue);
+                }
+                if (columnIndex === 0) { // 날짜
+                    const aDate = new Date(aValue);
+                    const bDate = new Date(bValue);
+                    return direction === 'asc' ? aDate - bDate : bDate - aDate;
+                }
+                return direction === 'asc' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
+            });
+            rows.forEach(row => tbody.appendChild(row));
+        }
+        // forecast-table 생성 후 정렬 기능 적용
+        const origForecast = window.fetch;
+        window.fetch = function() {
+            return origForecast.apply(this, arguments).then(res => {
+                if (arguments[0] && arguments[0].toString().includes('/api/sales-forecast')) {
+                    setTimeout(enableForecastTableSort, 200); // 테이블 렌더 후 적용
+                }
+                return res;
+            });
+        };
+    </script>
+</body>
+</html> 
