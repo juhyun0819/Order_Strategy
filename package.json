@@ -1,0 +1,32 @@
+{
+  "name": "shopping-ux-dashboard",
+  "version": "2.0.0",
+  "description": "여성복 의류 도매 대시보드 - 모듈화된 구조",
+  "main": "shop.py",
+  "scripts": {
+    "start": "python shop.py",
+    "dev": "python shop.py",
+    "build:css": "tailwindcss -i ./static/style.css -o ./static/output.css --watch",
+    "build:css:prod": "tailwindcss -i ./static/style.css -o ./static/output.css --minify",
+    "install:python": "pip install -r requirements.txt",
+    "setup": "npm install && pip install -r requirements.txt"
+  },
+  "keywords": [
+    "flask",
+    "dashboard",
+    "inventory",
+    "sales",
+    "analytics",
+    "tailwindcss"
+  ],
+  "author": "Shopping UX Team",
+  "license": "MIT",
+  "devDependencies": {
+    "tailwindcss": "^3.3.0",
+    "tailwindcss-animate": "^1.0.7"
+  },
+  "engines": {
+    "node": ">=16.0.0",
+    "python": ">=3.8.0"
+  }
+} 
