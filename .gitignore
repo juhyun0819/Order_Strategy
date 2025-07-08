@@ -161,4 +161,16 @@ static/output.css
 # Project specific
 inventory.db 
 
-C:/Users/p3hyu/Study/0_apple_game
+__pycache__
+0_apple_game/
+1_chrome_cache/
+fine_tuning/
+keyword_detector_ver2/
+keyword_detector_ver3/
+mileage/
+project1_problem_generator/
+project2_fine_tuning/
+project2_keyword_detector_advertise_api/
+
+
+my_langchain.py

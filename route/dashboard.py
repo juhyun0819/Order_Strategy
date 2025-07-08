@@ -1,9 +1,10 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from service.db import load_from_db, save_to_db, delete_by_date, reset_db
 from service.analysis import generate_inventory_alerts, generate_a_grade_alerts, get_pareto_products
 from service.visualization import create_visualizations
 from datetime import datetime
 import pandas as pd
+import json
 
 dashboard_bp = Blueprint('dashboard', __name__)
 
@@ -101,7 +102,30 @@ def dashboard():
         plots=plots, stats=stats, product_list=product_list,
         selected_product=selected_product, alert_df=alert_df, a_grade_alert_df=a_grade_alert_df, 
         search_query=search_query, last_year=last_year, unique_dates=unique_dates,
-        sidebar_products=sidebar_products)
+        sidebar_products=sidebar_products,
+        sidebar_products_json=json.dumps(sidebar_products)
+    )
+
+@dashboard_bp.route('/dashboard/plot')
+def dashboard_plot():
+    df = load_from_db()
+    all_dates = sorted(pd.to_datetime(df['판매일자']).unique()) if not df.empty else []
+    product = request.args.get('product')
+    product_list = sorted(df['품명'].unique()) if not df.empty else []
+    if product and product in product_list:
+        filtered_df = df[df['품명'] == product]
+        stats = {
+            'product_total_sales': int(filtered_df['실판매'].sum()),
+            'product_current_stock': int(filtered_df['현재고'].sum()),
+            'product_7days_sales': int(filtered_df.tail(7)['실판매'].sum()),
+        }
+        plots = create_visualizations(filtered_df, only_product=True, all_dates=all_dates)
+        return jsonify({
+            'plot': plots['sales_trend'],
+            'stats': stats,
+            'product': product
+        })
+    return jsonify({'error': 'Invalid product'}), 400
 
 def extract_date_from_filename(filename):
     """파일명에서 날짜 추출"""

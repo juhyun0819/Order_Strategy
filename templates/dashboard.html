@@ -616,6 +616,66 @@
                 console.log('✅ 정렬 완료');
             }
         });
+
+        // 키보드 네비게이션 기능
+        document.addEventListener('DOMContentLoaded', function() {
+            // 현재 선택된 상품이 있는지 확인
+            const currentProduct = '{{ selected_product }}';
+            if (!currentProduct) {
+                return; // 상품이 선택되지 않았으면 키보드 네비게이션 비활성화
+            }
+
+            // 사이드바에서 상품 목록 가져오기
+            const productLinks = document.querySelectorAll('nav a[href*="product="]');
+            const products = Array.from(productLinks).map(link => {
+                const url = new URL(link.href);
+                return url.searchParams.get('product');
+            });
+
+            if (products.length <= 1) {
+                return; // 상품이 1개 이하면 네비게이션 불필요
+            }
+
+            // 현재 상품의 인덱스 찾기
+            const currentIndex = products.indexOf(currentProduct);
+            if (currentIndex === -1) {
+                return;
+            }
+
+            // 키보드 이벤트 리스너 추가
+            document.addEventListener('keydown', function(e) {
+                // 입력 필드에 포커스가 있으면 키보드 네비게이션 비활성화
+                if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
+                    return;
+                }
+
+                let nextIndex = -1;
+
+                if (e.key === 'ArrowLeft') {
+                    // 왼쪽 화살표: 이전 상품
+                    nextIndex = currentIndex > 0 ? currentIndex - 1 : products.length - 1;
+                    e.preventDefault();
+                } else if (e.key === 'ArrowRight') {
+                    // 오른쪽 화살표: 다음 상품
+                    nextIndex = currentIndex < products.length - 1 ? currentIndex + 1 : 0;
+                    e.preventDefault();
+                }
+
+                if (nextIndex !== -1 && nextIndex !== currentIndex) {
+                    const nextProduct = products[nextIndex];
+                    window.location.href = `/dashboard?product=${encodeURIComponent(nextProduct)}`;
+                }
+            });
+
+            // 키보드 단축키 안내 표시
+            const header = document.querySelector('header');
+            if (header) {
+                const keyboardInfo = document.createElement('div');
+                keyboardInfo.className = 'text-xs text-gray-400 mt-1';
+                keyboardInfo.innerHTML = '<i class="fas fa-keyboard mr-1"></i>← → 키로 상품 이동';
+                header.querySelector('.flex.items-center.space-x-4').appendChild(keyboardInfo);
+            }
+        });
     </script>
 </body>
 </html> 
