@@ -1,15 +1,42 @@
-
-
-
 import pandas as pd
 import numpy as np
 import json
 from datetime import datetime, timedelta
 from service.analysis import recent_7days_analysis
+from statsmodels.nonparametric.smoothers_lowess import lowess
 
-def create_visualizations(df, only_product=False, all_dates=None):
-    """ECharts용 대시보드 그래프 데이터 생성"""
+class TrendCalculator:
+    """추세선 계산 (SOLID 원칙 적용, LOWESS 기반)"""
+    def __init__(self, window=7, frac=0.2):
+        self.window = window
+        self.frac = frac
+
+    def _lowess(self, y):
+        if len(y) < 2:
+            return np.array([])
+        x = np.arange(len(y))
+        return lowess(y, x, frac=self.frac, return_sorted=False)
+
+    def lower_trend(self, y):
+        roll_min = pd.Series(y).rolling(self.window, min_periods=1).min()
+        return self._lowess(roll_min.values)
+
+    def upper_trend(self, y):
+        roll_max = pd.Series(y).rolling(self.window, min_periods=1).max()
+        return self._lowess(roll_max.values)
+
+    def mid_trend(self, y):
+        lower = self.lower_trend(y)
+        upper = self.upper_trend(y)
+        if len(lower) == len(upper):
+            return (lower + upper) / 2
+        return np.array([])
+
+def create_visualizations(df, only_product=False, all_dates=None, trend_window=7, trend_frac=0.08):
+    # frac은 0.08로 설정하여 월별 흐름강조
+    """ECharts용 대시보드 그래프 데이터 생성 (추세선 계산 분리)"""
     charts = {}
+    trend_calculator = TrendCalculator(window=trend_window, frac=trend_frac)
     
     # 1. 전체 판매 트렌드
     if only_product and all_dates is not None and len(all_dates) > 0:
@@ -22,64 +49,39 @@ def create_visualizations(df, only_product=False, all_dates=None):
     else:
         df = df.copy()
         df['판매일자'] = pd.to_datetime(df['판매일자'])
-        
-        # 현재 연도의 데이터만 필터링
         current_year = datetime.now().year
         df_current_year = df[df['판매일자'].dt.year == current_year]
-        
         if not df_current_year.empty:
             daily_sales = df_current_year.groupby('판매일자')['실판매'].sum().reset_index()
             daily_sales['판매일자'] = pd.to_datetime(daily_sales['판매일자'])
             daily_sales = daily_sales.sort_values('판매일자')
-            
-            # 현재 연도의 1월 1일부터 마지막 데이터까지 생성
             start_date = pd.Timestamp(f'{current_year}-01-01')
             end_date = daily_sales['판매일자'].max()
             full_date_range = pd.date_range(start=start_date, end=end_date, freq='D')
-            
-            # 전체 날짜 범위에 대해 데이터 재인덱싱
             daily_sales = daily_sales.set_index('판매일자').reindex(full_date_range, fill_value=0).reset_index()
             daily_sales.columns = ['판매일자', '실판매']
         else:
-            # 현재 연도 데이터가 없으면 빈 데이터프레임 생성
             daily_sales = pd.DataFrame({'판매일자': [], '실판매': []})
-    
-    # 실판매가 0인 데이터는 제외
+
     daily_sales_nonzero = daily_sales[daily_sales['실판매'] != 0]
-    
-    # 기본 차트 생성 (데이터가 없어도)
     dates = daily_sales_nonzero['판매일자'].dt.strftime('%Y-%m-%d').tolist() if not daily_sales_nonzero.empty else []
     sales_data = daily_sales_nonzero['실판매'].tolist() if not daily_sales_nonzero.empty else []
-    
-    if not daily_sales_nonzero.empty:
-        # 추세선 계산
-        sales_nonzero = daily_sales_nonzero['실판매'].values
-        x_nonzero = np.arange(len(sales_nonzero))
 
-        if len(sales_nonzero) > 1:
-            roll_min = pd.Series(sales_nonzero).rolling(7, min_periods=1).min()
-            roll_max = pd.Series(sales_nonzero).rolling(7, min_periods=1).max()
-                
-            if len(x_nonzero) == len(roll_min) and len(x_nonzero) > 1:
-                low_trend = np.poly1d(np.polyfit(x_nonzero, roll_min, 1))(x_nonzero)
-                high_trend = np.poly1d(np.polyfit(x_nonzero, roll_max, 1))(x_nonzero)
-                mid_trend = (low_trend + high_trend) / 2
-            else:
-                low_trend = roll_min.values
-                high_trend = roll_max.values
-                mid_trend = (roll_min + roll_max).values / 2
-        else:
-            low_trend = high_trend = mid_trend = np.array([])
+    # --- 추세선 계산 (LOWESS 기반 상/하/중) ---
+    if not daily_sales_nonzero.empty:
+        sales_nonzero = daily_sales_nonzero['실판매'].values
+        low_trend = trend_calculator.lower_trend(sales_nonzero)
+        high_trend = trend_calculator.upper_trend(sales_nonzero)
+        mid_trend = trend_calculator.mid_trend(sales_nonzero)
     else:
         low_trend = high_trend = mid_trend = np.array([])
-    
-    # 추세선 데이터
+
     trend_data = {
         'low': low_trend.tolist() if len(low_trend) > 0 else [],
         'high': high_trend.tolist() if len(high_trend) > 0 else [],
         'mid': mid_trend.tolist() if len(mid_trend) > 0 else []
     }
-    
+
     charts['sales_trend'] = {
         'type': 'line',
         'title': '판매 트렌드',
@@ -103,33 +105,32 @@ def create_visualizations(df, only_product=False, all_dates=None):
             ]
         }
     }
-    
-    # 추세선 시리즈 추가
+
     if len(trend_data['low']) > 0:
         charts['sales_trend']['config']['series'].extend([
             {
-                'name': '저점 추세',
+                'name': '저점 추세(LOWESS)',
                 'type': 'line',
                 'data': trend_data['low'],
                 'lineStyle': {'type': 'dashed', 'color': '#5470c6'},
                 'symbol': 'none'
             },
             {
-                'name': '고점 추세', 
+                'name': '고점 추세(LOWESS)', 
                 'type': 'line',
                 'data': trend_data['high'],
                 'lineStyle': {'type': 'dashed', 'color': '#91cc75'},
                 'symbol': 'none'
             },
             {
-                'name': '중위 추세',
+                'name': '중위 추세(LOWESS)',
                 'type': 'line', 
                 'data': trend_data['mid'],
                 'lineStyle': {'type': 'dashed', 'color': '#ee6666'},
                 'symbol': 'none'
             }
         ])
-    
+
     # 2. 상품별 실판매 집계 (only_product=False일 때만)
     if not only_product and '품명' in df.columns and '실판매' in df.columns:
         product_sales = df.groupby('품명')['실판매'].sum().sort_values(ascending=False).head(10)

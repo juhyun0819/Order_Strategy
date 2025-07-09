@@ -17,6 +17,8 @@ def dashboard():
     # 파레토 거래처 테이블 초기화 (최초 1회)
     init_clients_table()
 
+    selected_product = request.args.get('product')
+
     # 거래처 수 저장 처리 (POST, 상품 세부 페이지)
     if request.method == 'POST' and selected_product and 'client_count_form' in request.form:
         value = request.form.get('client_count', '').strip()
@@ -66,7 +68,6 @@ def dashboard():
         df = df[df['품명'] != '(일반상품)']
     product_list = sorted(df['품명'].unique()) if not df.empty else []
     all_dates = sorted(pd.to_datetime(df['판매일자']).unique()) if not df.empty else []
-    selected_product = request.args.get('product')
     search_query = request.args.get('search', '')
     
     if selected_product and selected_product in product_list:
