@@ -162,3 +162,31 @@ def get_pareto_products(df):
     # 80% 기준으로 파레토 상품 선택
     pareto_products = cumulative_percentage[cumulative_percentage <= 80].index.tolist()
     return pareto_products 
+
+def get_product_stats(df, product_name):
+    """
+    선택된 상품의 누적 판매량, 현재고(가장 최근 날짜), 최근 7일 판매량을 반환
+    """
+    if df.empty or product_name not in df['품명'].unique():
+        return {
+            'product_total_sales': 0,
+            'product_current_stock': 0,
+            'product_7days_sales': 0
+        }
+    product_df = df[df['품명'] == product_name].copy()
+    # 누적 판매량
+    total_sales = product_df['실판매'].sum()
+    # 날짜 컬럼 변환
+    product_df['판매일자'] = pd.to_datetime(product_df['판매일자'])
+    # 현재고: 가장 최근 날짜의 재고
+    latest_date = product_df['판매일자'].max()
+    latest_row = product_df[product_df['판매일자'] == latest_date]
+    current_stock = latest_row['현재고'].iloc[0] if not latest_row.empty else 0
+    # 최근 7일 판매량
+    last_7_days = latest_date - pd.Timedelta(days=6)
+    sales_7days = product_df[product_df['판매일자'] >= last_7_days]['실판매'].sum()
+    return {
+        'product_total_sales': int(total_sales),
+        'product_current_stock': int(current_stock),
+        'product_7days_sales': int(sales_7days)
+    } 

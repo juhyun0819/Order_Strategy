@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>여성복 의류 도매 - 대시보드</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="{{ url_for('static', filename='output.css') }}" rel="stylesheet">
@@ -117,9 +118,15 @@
                         <div class="h-10 w-10 rounded-lg bg-blue-100 flex items-center justify-center">
                             <i class="fas fa-tshirt text-blue-600"></i>
                         </div>
-                        <div>
-                            <h2 class="text-lg font-semibold text-gray-900">{{ selected_product }}</h2>
-                            <p class="text-sm text-gray-500">선택한 상품의 판매 추세 및 통계</p>
+                        <div class="flex-1 flex items-center justify-between">
+                            <h2 class="text-lg font-semibold text-gray-900 inline-block">{{ selected_product }}</h2>
+                            <!-- 거래처 수 입력란 (오른쪽 끝) -->
+                            <form method="post" class="flex items-center" style="margin-left: auto;">
+                                <input type="hidden" name="client_count_form" value="1">
+                                <input type="number" min="0" name="client_count" class="form-control w-40 mr-2" placeholder="거래처 수"
+                                    value="{{ current_client_count if current_client_count is not none else '' }}">
+                                <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-save"></i></button>
+                            </form>
                         </div>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
@@ -139,8 +146,19 @@
                     {% if plots.sales_trend %}
                     <div class="mb-6">
                         <h3 class="text-lg font-semibold text-gray-900 mb-2">판매 추세</h3>
-                        <img src="data:image/png;base64,{{ plots.sales_trend }}" alt="판매 추세" class="w-full h-auto rounded-lg">
+                        <div id="echart-product-sales-trend" style="width:100%;height:300px;"></div>
                     </div>
+                    <script>
+                    document.addEventListener('DOMContentLoaded', function() {
+                        var option_product_sales_trend = {{ plots.sales_trend.config|tojson }};
+                        option_product_sales_trend.tooltip = {trigger: 'axis'};
+                        var chartDomProduct = document.getElementById('echart-product-sales-trend');
+                        if (chartDomProduct) {
+                            var myChartProduct = echarts.init(chartDomProduct);
+                            myChartProduct.setOption(option_product_sales_trend);
+                        }
+                    });
+                    </script>
                     {% endif %}
                 </div>
             </div>
@@ -261,11 +279,11 @@
                 <div class="bg-white rounded-xl shadow-sm border p-6">
                     <div class="flex items-center justify-between">
                         <div>
-                            <p class="text-sm font-medium text-gray-600">총 현재고</p>
-                            <p class="text-2xl font-bold text-gray-900">{{ "{:,}".format(stats.total_inventory) }}</p>
+                            <p class="text-sm font-medium text-gray-600">최근 7일 판매량</p>
+                            <p class="text-2xl font-bold text-pink-700">{{ "{:,}".format(stats.recent_7days_sales) }}</p>
                         </div>
-                        <div class="h-12 w-12 rounded-lg bg-yellow-100 flex items-center justify-center">
-                            <i class="fas fa-warehouse text-yellow-600"></i>
+                        <div class="h-12 w-12 rounded-lg bg-pink-100 flex items-center justify-center">
+                            <i class="fas fa-calendar-week text-pink-600"></i>
                         </div>
                     </div>
                 </div>
@@ -436,7 +454,7 @@
 
                 <!-- Charts Section -->
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-                    {% if plots.sales_trend %}
+                    {% if charts.sales_trend %}
                     <div class="bg-white rounded-xl shadow-sm border p-6">
                         <div class="flex items-center space-x-3 mb-4">
                             <div class="h-10 w-10 rounded-lg bg-blue-100 flex items-center justify-center">
@@ -447,11 +465,11 @@
                                 <p class="text-sm text-gray-500">일별 판매량 추이</p>
                             </div>
                         </div>
-                        <img src="data:image/png;base64,{{ plots.sales_trend }}" alt="판매 추세" class="w-full h-auto rounded-lg">
+                        <div id="echart-sales-trend" style="width:100%;height:300px;"></div>
                     </div>
                     {% endif %}
 
-                    {% if plots.product_sales %}
+                    {% if charts.product_sales %}
                     <div class="bg-white rounded-xl shadow-sm border p-6">
                         <div class="flex items-center space-x-3 mb-4">
                             <div class="h-10 w-10 rounded-lg bg-green-100 flex items-center justify-center">
@@ -462,11 +480,11 @@
                                 <p class="text-sm text-gray-500">상위 10개 상품 판매량</p>
                             </div>
                         </div>
-                        <img src="data:image/png;base64,{{ plots.product_sales }}" alt="상품별 판매" class="w-full h-auto rounded-lg">
+                        <div id="echart-product-sales" style="width:100%;height:300px;"></div>
                     </div>
                     {% endif %}
 
-                    {% if plots.color_sales %}
+                    {% if charts.color_sales %}
                     <div class="bg-white rounded-xl shadow-sm border p-6">
                         <div class="flex items-center space-x-3 mb-4">
                             <div class="h-10 w-10 rounded-lg bg-purple-100 flex items-center justify-center">
@@ -477,11 +495,11 @@
                                 <p class="text-sm text-gray-500">인기 컬러 분석</p>
                             </div>
                         </div>
-                        <img src="data:image/png;base64,{{ plots.color_sales }}" alt="컬러별 판매" class="w-full h-auto rounded-lg">
+                        <div id="echart-color-sales" style="width:100%;height:300px;"></div>
                     </div>
                     {% endif %}
 
-                    {% if plots.size_sales %}
+                    {% if charts.size_sales %}
                     <div class="bg-white rounded-xl shadow-sm border p-6">
                         <div class="flex items-center space-x-3 mb-4">
                             <div class="h-10 w-10 rounded-lg bg-yellow-100 flex items-center justify-center">
@@ -492,13 +510,13 @@
                                 <p class="text-sm text-gray-500">인기 사이즈 분석</p>
                             </div>
                         </div>
-                        <img src="data:image/png;base64,{{ plots.size_sales }}" alt="사이즈별 판매" class="w-full h-auto rounded-lg">
+                        <div id="echart-size-sales" style="width:100%;height:300px;"></div>
                     </div>
                     {% endif %}
                 </div>
 
                 <!-- Additional Charts -->
-                {% if plots.pareto_analysis %}
+                {% if charts.pareto_analysis %}
                 <div class="mb-8">
                     <div class="bg-white rounded-xl shadow-sm border p-6">
                         <div class="flex items-center space-x-3 mb-4">
@@ -510,10 +528,71 @@
                                 <p class="text-sm text-gray-500">상품별 매출 집중도 분석 (80% 기준)</p>
                             </div>
                         </div>
-                        <img src="data:image/png;base64,{{ plots.pareto_analysis }}" alt="파레토 분석" class="w-full h-auto rounded-lg">
+                        <div id="echart-pareto-analysis" style="width:100%;height:300px;"></div>
                     </div>
                 </div>
                 {% endif %}
+
+                <!-- ECharts 렌더링 스크립트 -->
+                <script>
+                document.addEventListener('DOMContentLoaded', function() {
+                    // 판매 추세
+                    {% if charts.sales_trend %}
+                    var option_sales_trend = {{ charts.sales_trend.config|tojson }};
+                    option_sales_trend.title = {text: '{{ charts.sales_trend.title }}', left: 'center'};
+                    option_sales_trend.tooltip = {trigger: 'axis'};
+                    var chartDom1 = document.getElementById('echart-sales-trend');
+                    if (chartDom1) {
+                        var myChart1 = echarts.init(chartDom1);
+                        myChart1.setOption(option_sales_trend);
+                    }
+                    {% endif %}
+                    // 상품별 판매
+                    {% if charts.product_sales %}
+                    var option_product_sales = {{ charts.product_sales.config|tojson }};
+                    option_product_sales.title = {text: '{{ charts.product_sales.title }}', left: 'center'};
+                    option_product_sales.tooltip = {trigger: 'axis'};
+                    var chartDom2 = document.getElementById('echart-product-sales');
+                    if (chartDom2) {
+                        var myChart2 = echarts.init(chartDom2);
+                        myChart2.setOption(option_product_sales);
+                    }
+                    {% endif %}
+                    // 컬러별 판매
+                    {% if charts.color_sales %}
+                    var option_color_sales = {{ charts.color_sales.config|tojson }};
+                    option_color_sales.title = {text: '{{ charts.color_sales.title }}', left: 'center'};
+                    option_color_sales.tooltip = {trigger: 'axis'};
+                    var chartDom3 = document.getElementById('echart-color-sales');
+                    if (chartDom3) {
+                        var myChart3 = echarts.init(chartDom3);
+                        myChart3.setOption(option_color_sales);
+                    }
+                    {% endif %}
+                    // 사이즈별 판매
+                    {% if charts.size_sales %}
+                    var option_size_sales = {{ charts.size_sales.config|tojson }};
+                    option_size_sales.title = {text: '{{ charts.size_sales.title }}', left: 'center'};
+                    option_size_sales.tooltip = {trigger: 'axis'};
+                    var chartDom4 = document.getElementById('echart-size-sales');
+                    if (chartDom4) {
+                        var myChart4 = echarts.init(chartDom4);
+                        myChart4.setOption(option_size_sales);
+                    }
+                    {% endif %}
+                    // 파레토 분석
+                    {% if charts.pareto_analysis %}
+                    var option_pareto = {{ charts.pareto_analysis.config|tojson }};
+                    option_pareto.title = {text: '{{ charts.pareto_analysis.title }}', left: 'center'};
+                    option_pareto.tooltip = {trigger: 'axis'};
+                    var chartDom5 = document.getElementById('echart-pareto-analysis');
+                    if (chartDom5) {
+                        var myChart5 = echarts.init(chartDom5);
+                        myChart5.setOption(option_pareto);
+                    }
+                    {% endif %}
+                });
+                </script>
             {% endif %}
         </main>
     </div>

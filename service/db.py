@@ -69,3 +69,30 @@ def delete_by_date(date):
     conn.commit()
     conn.close()
     return deleted_count 
+
+def init_clients_table():
+    conn = sqlite3.connect('db.sqlite3')
+    c = conn.cursor()
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS pareto_clients (
+            product TEXT PRIMARY KEY,
+            client_count INTEGER
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+def set_client_count(product, count):
+    conn = sqlite3.connect('db.sqlite3')
+    c = conn.cursor()
+    c.execute('REPLACE INTO pareto_clients (product, client_count) VALUES (?, ?)', (product, count))
+    conn.commit()
+    conn.close()
+
+def get_client_counts():
+    conn = sqlite3.connect('db.sqlite3')
+    c = conn.cursor()
+    c.execute('SELECT product, client_count FROM pareto_clients')
+    data = dict(c.fetchall())
+    conn.close()
+    return data 

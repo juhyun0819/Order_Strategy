@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
-from service.db import load_from_db, save_to_db, delete_by_date, reset_db
-from service.analysis import generate_inventory_alerts, generate_a_grade_alerts, get_pareto_products
+from service.db import load_from_db, save_to_db, delete_by_date, reset_db, init_clients_table, set_client_count, get_client_counts
+from service.analysis import generate_inventory_alerts, generate_a_grade_alerts, get_pareto_products, get_product_stats
 from service.visualization import create_visualizations
 from datetime import datetime
 import pandas as pd
@@ -14,6 +14,24 @@ def root():
 
 @dashboard_bp.route('/dashboard', methods=['GET', 'POST'])
 def dashboard():
+    # 파레토 거래처 테이블 초기화 (최초 1회)
+    init_clients_table()
+
+    # 거래처 수 저장 처리 (POST, 상품 세부 페이지)
+    if request.method == 'POST' and selected_product and 'client_count_form' in request.form:
+        value = request.form.get('client_count', '').strip()
+        if value == '':
+            # 빈 값이면 삭제(0으로 저장하거나, 삭제 로직 추가 가능)
+            set_client_count(selected_product, None)
+        else:
+            try:
+                count = int(value)
+                set_client_count(selected_product, count)
+            except ValueError:
+                pass
+        flash('거래처 수가 저장되었습니다.', 'success')
+        return redirect(url_for('dashboard.dashboard', product=selected_product))
+    
     # 파일 업로드 처리 (POST)
     if request.method == 'POST':
         files = request.files.getlist('files')
@@ -43,6 +61,9 @@ def dashboard():
     
     # 대시보드 렌더링 (GET)
     df = load_from_db()
+    # '일반상품' 제외
+    if not df.empty:
+        df = df[df['품명'] != '(일반상품)']
     product_list = sorted(df['품명'].unique()) if not df.empty else []
     all_dates = sorted(pd.to_datetime(df['판매일자']).unique()) if not df.empty else []
     selected_product = request.args.get('product')
@@ -62,15 +83,25 @@ def dashboard():
             'upload_dates': filtered_df['upload_date'].nunique(),
             'sales_dates': filtered_df['판매일자'].nunique()
         }
+        # 상품별 통계 추가
+        stats.update(get_product_stats(df, selected_product))
         plots = create_visualizations(filtered_df, only_product=True, all_dates=all_dates)
+        charts = create_visualizations(df)  # 전체 데이터용
         alert_df = None
         a_grade_alert_df = None
     else:
         filtered_df = df
+        # 최근 7일 판매량 계산
+        recent_7days_sales = 0
+        if not filtered_df.empty:
+            filtered_df['판매일자'] = pd.to_datetime(filtered_df['판매일자'])
+            latest_date = filtered_df['판매일자'].max()
+            last_7_days = latest_date - pd.Timedelta(days=6)
+            recent_7days_sales = filtered_df[filtered_df['판매일자'] >= last_7_days]['실판매'].sum()
         stats = {
             'total_items': len(filtered_df),
             'total_sales': filtered_df['실판매'].sum(),
-            'total_inventory': filtered_df['현재고'].sum(),
+            'recent_7days_sales': int(recent_7days_sales),
             'total_pending': filtered_df['미송잔량'].sum(),
             'unique_products': filtered_df['품명'].nunique(),
             'unique_colors': filtered_df['칼라'].nunique(),
@@ -79,7 +110,8 @@ def dashboard():
             'upload_dates': filtered_df['upload_date'].nunique(),
             'sales_dates': filtered_df['판매일자'].nunique()
         }
-        plots = create_visualizations(filtered_df)
+        charts = create_visualizations(filtered_df)
+        plots = None
         alert_rows = generate_inventory_alerts(df)
         alert_df = pd.DataFrame(alert_rows) if alert_rows else None
         a_grade_alert_rows = generate_a_grade_alerts(df)
@@ -97,13 +129,19 @@ def dashboard():
         unique_dates = sorted(df['판매일자'].unique())
     
     sidebar_products = get_pareto_products(df) if not df.empty else []
+    # 파레토 상품별 거래처 수 불러오기
+    client_counts = get_client_counts()
+    # 현재 상품의 거래처 수
+    current_client_count = client_counts.get(selected_product) if selected_product else None
     
     return render_template('dashboard.html',
-        plots=plots, stats=stats, product_list=product_list,
+        charts=charts, plots=plots, stats=stats, product_list=product_list,
         selected_product=selected_product, alert_df=alert_df, a_grade_alert_df=a_grade_alert_df, 
         search_query=search_query, last_year=last_year, unique_dates=unique_dates,
         sidebar_products=sidebar_products,
-        sidebar_products_json=json.dumps(sidebar_products)
+        sidebar_products_json=json.dumps(sidebar_products),
+        client_counts=client_counts,
+        current_client_count=current_client_count
     )
 
 @dashboard_bp.route('/dashboard/plot')
