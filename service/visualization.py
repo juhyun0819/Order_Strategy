@@ -47,86 +47,88 @@ def create_visualizations(df, only_product=False, all_dates=None):
     # 실판매가 0인 데이터는 제외
     daily_sales_nonzero = daily_sales[daily_sales['실판매'] != 0]
     
+    # 기본 차트 생성 (데이터가 없어도)
+    dates = daily_sales_nonzero['판매일자'].dt.strftime('%Y-%m-%d').tolist() if not daily_sales_nonzero.empty else []
+    sales_data = daily_sales_nonzero['실판매'].tolist() if not daily_sales_nonzero.empty else []
+    
     if not daily_sales_nonzero.empty:
         # 추세선 계산
         sales_nonzero = daily_sales_nonzero['실판매'].values
-    x_nonzero = np.arange(len(sales_nonzero))
+        x_nonzero = np.arange(len(sales_nonzero))
 
-    if len(sales_nonzero) > 1:
-        roll_min = pd.Series(sales_nonzero).rolling(7, min_periods=1).min()
-        roll_max = pd.Series(sales_nonzero).rolling(7, min_periods=1).max()
-            
-        if len(x_nonzero) == len(roll_min) and len(x_nonzero) > 1:
-            low_trend = np.poly1d(np.polyfit(x_nonzero, roll_min, 1))(x_nonzero)
-            high_trend = np.poly1d(np.polyfit(x_nonzero, roll_max, 1))(x_nonzero)
-            mid_trend = (low_trend + high_trend) / 2
+        if len(sales_nonzero) > 1:
+            roll_min = pd.Series(sales_nonzero).rolling(7, min_periods=1).min()
+            roll_max = pd.Series(sales_nonzero).rolling(7, min_periods=1).max()
+                
+            if len(x_nonzero) == len(roll_min) and len(x_nonzero) > 1:
+                low_trend = np.poly1d(np.polyfit(x_nonzero, roll_min, 1))(x_nonzero)
+                high_trend = np.poly1d(np.polyfit(x_nonzero, roll_max, 1))(x_nonzero)
+                mid_trend = (low_trend + high_trend) / 2
+            else:
+                low_trend = roll_min.values
+                high_trend = roll_max.values
+                mid_trend = (roll_min + roll_max).values / 2
         else:
-            low_trend = roll_min.values
-            high_trend = roll_max.values
-            mid_trend = (roll_min + roll_max).values / 2
+            low_trend = high_trend = mid_trend = np.array([])
     else:
         low_trend = high_trend = mid_trend = np.array([])
-        
-        # ECharts 데이터 구성
-        dates = daily_sales_nonzero['판매일자'].dt.strftime('%Y-%m-%d').tolist()
-        sales_data = daily_sales_nonzero['실판매'].tolist()
-        
-        # 추세선 데이터
-        trend_data = {
-            'low': low_trend.tolist() if len(low_trend) > 0 else [],
-            'high': high_trend.tolist() if len(high_trend) > 0 else [],
-            'mid': mid_trend.tolist() if len(mid_trend) > 0 else []
-        }
-        
-        charts['sales_trend'] = {
-            'type': 'line',
-            'title': '판매 트렌드',
-            'data': {
-                'dates': dates,
-                'sales': sales_data,
-                'trends': trend_data
-            },
-            'config': {
-                'xAxis': {'type': 'category', 'name': '월', 'data': dates},
-                'yAxis': {'type': 'value', 'name': '판매량'},
-                'series': [
-                    {
-                        'name': '실판매',
-                        'type': 'line',
-                        'data': sales_data,
-                        'symbol': 'circle',
-                        'symbolSize': 4,
-                        'lineStyle': {'width': 2}
-                    }
-                ]
-            }
-        }
-        
-        # 추세선 시리즈 추가
-        if len(trend_data['low']) > 0:
-            charts['sales_trend']['config']['series'].extend([
+    
+    # 추세선 데이터
+    trend_data = {
+        'low': low_trend.tolist() if len(low_trend) > 0 else [],
+        'high': high_trend.tolist() if len(high_trend) > 0 else [],
+        'mid': mid_trend.tolist() if len(mid_trend) > 0 else []
+    }
+    
+    charts['sales_trend'] = {
+        'type': 'line',
+        'title': '판매 트렌드',
+        'data': {
+            'dates': dates,
+            'sales': sales_data,
+            'trends': trend_data
+        },
+        'config': {
+            'xAxis': {'type': 'category', 'name': '월', 'data': dates},
+            'yAxis': {'type': 'value', 'name': '판매량'},
+            'series': [
                 {
-                    'name': '저점 추세',
+                    'name': '실판매',
                     'type': 'line',
-                    'data': trend_data['low'],
-                    'lineStyle': {'type': 'dashed', 'color': '#5470c6'},
-                    'symbol': 'none'
-                },
-                {
-                    'name': '고점 추세', 
-                    'type': 'line',
-                    'data': trend_data['high'],
-                    'lineStyle': {'type': 'dashed', 'color': '#91cc75'},
-                    'symbol': 'none'
-                },
-                {
-                    'name': '중위 추세',
-                    'type': 'line', 
-                    'data': trend_data['mid'],
-                    'lineStyle': {'type': 'dashed', 'color': '#ee6666'},
-                    'symbol': 'none'
+                    'data': sales_data,
+                    'symbol': 'circle',
+                    'symbolSize': 4,
+                    'lineStyle': {'width': 2}
                 }
-            ])
+            ]
+        }
+    }
+    
+    # 추세선 시리즈 추가
+    if len(trend_data['low']) > 0:
+        charts['sales_trend']['config']['series'].extend([
+            {
+                'name': '저점 추세',
+                'type': 'line',
+                'data': trend_data['low'],
+                'lineStyle': {'type': 'dashed', 'color': '#5470c6'},
+                'symbol': 'none'
+            },
+            {
+                'name': '고점 추세', 
+                'type': 'line',
+                'data': trend_data['high'],
+                'lineStyle': {'type': 'dashed', 'color': '#91cc75'},
+                'symbol': 'none'
+            },
+            {
+                'name': '중위 추세',
+                'type': 'line', 
+                'data': trend_data['mid'],
+                'lineStyle': {'type': 'dashed', 'color': '#ee6666'},
+                'symbol': 'none'
+            }
+        ])
     
     # 2. 상품별 실판매 집계 (only_product=False일 때만)
     if not only_product and '품명' in df.columns and '실판매' in df.columns:
@@ -136,16 +138,16 @@ def create_visualizations(df, only_product=False, all_dates=None):
             'type': 'bar',
             'title': '상품별 판매량',
             'data': {
-                'categories': product_sales.index.tolist(),
-                'values': product_sales.values.tolist()
+                'categories': product_sales.index.tolist() if not product_sales.empty else [],
+                'values': product_sales.values.tolist() if not product_sales.empty else []
             },
             'config': {
-                'xAxis': {'type': 'category', 'name': '품명', 'data': product_sales.index.tolist(), 'axisLabel': {'rotate': 30, 'interval': 0}},
+                'xAxis': {'type': 'category', 'name': '품명', 'data': product_sales.index.tolist() if not product_sales.empty else [], 'axisLabel': {'rotate': 30, 'interval': 0}},
                 'yAxis': {'type': 'value', 'name': '실판매'},
                 'series': [{
                     'name': '판매량',
                     'type': 'bar',
-                    'data': product_sales.values.tolist(),
+                    'data': product_sales.values.tolist() if not product_sales.empty else [],
                     'itemStyle': {'color': '#73c0de'}
                 }]
             }
@@ -363,12 +365,7 @@ def create_visualizations(df, only_product=False, all_dates=None):
                         'type': 'category',
                         'name': '월',
                         'data': weekly_sales['주차'][:last_week].tolist(),
-                        'axisLabel': {
-                            'formatter': lambda value, index: {
-                                1:'1월', 5:'2월', 9:'3월', 13:'4월', 17:'5월', 21:'6월',
-                                25:'7월', 29:'8월', 33:'9월', 37:'10월', 41:'11월', 45:'12월'}.get(value, '')
-                            }
-                        }
+                        'axisLabel': {'rotate': 30, 'interval': 0}
                     },
                     'yAxis': {'type': 'value', 'name': '판매량'},
                     'series': [{
@@ -380,6 +377,7 @@ def create_visualizations(df, only_product=False, all_dates=None):
                         'lineStyle': {'width': 2, 'color': '#4ECDC4'}
                     }]
                 }
+            }
     
     # 7. 전년도 분석
     if not df.empty:

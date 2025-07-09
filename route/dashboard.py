@@ -87,6 +87,7 @@ def dashboard():
         stats.update(get_product_stats(df, selected_product))
         plots = create_visualizations(filtered_df, only_product=True, all_dates=all_dates)
         charts = create_visualizations(df)  # 전체 데이터용
+        
         alert_df = None
         a_grade_alert_df = None
     else:
@@ -112,6 +113,7 @@ def dashboard():
         }
         charts = create_visualizations(filtered_df)
         plots = None
+        
         alert_rows = generate_inventory_alerts(df)
         alert_df = pd.DataFrame(alert_rows) if alert_rows else None
         a_grade_alert_rows = generate_a_grade_alerts(df)
