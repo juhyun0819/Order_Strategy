@@ -32,102 +32,178 @@ class TrendCalculator:
             return (lower + upper) / 2
         return np.array([])
 
+def get_full_year_dates(year):
+    return pd.date_range(start=f'{year}-01-01', end=f'{year}-12-31', freq='D')
+
+def safe_list(arr):
+    # np.ndarray면 list로 변환, 내부 값도 float 또는 None
+    if hasattr(arr, 'tolist'):
+        arr = arr.tolist()
+    return [float(v) if v is not None and not (isinstance(v, float) and (v != v)) else None for v in arr]
+
+def get_yearly_trend(df, year, trend_calculator):
+    full_date_range = pd.date_range(start=f'{year}-01-01', end=f'{year}-12-31', freq='D')
+    df_year = df[df['판매일자'].dt.year == year]
+    daily_sales = df_year.groupby('판매일자')['실판매'].sum()
+    daily_sales = daily_sales.reindex(full_date_range)
+    sales_data = [float(v) if v is not None and not pd.isna(v) else None for v in daily_sales.values]
+    valid_indices = [i for i, v in enumerate(sales_data) if v is not None]
+    valid_sales = [sales_data[i] for i in valid_indices]
+    def pad_trend(trend):
+        arr = [None] * len(sales_data)
+        for idx, v in zip(valid_indices, trend):
+            arr[idx] = float(v) if v is not None else None
+        return list(arr)
+    if valid_sales:
+        low_trend = pad_trend(trend_calculator.lower_trend(valid_sales))
+        high_trend = pad_trend(trend_calculator.upper_trend(valid_sales))
+        mid_trend = pad_trend(trend_calculator.mid_trend(valid_sales))
+    else:
+        low_trend = high_trend = mid_trend = [None] * len(sales_data)
+    return {'low': low_trend, 'high': high_trend, 'mid': mid_trend}
+
 def create_visualizations(df, only_product=False, all_dates=None, trend_window=7, trend_frac=0.08):
     # frac은 0.08로 설정하여 월별 흐름강조
-    """ECharts용 대시보드 그래프 데이터 생성 (추세선 계산 분리)"""
     charts = {}
     trend_calculator = TrendCalculator(window=trend_window, frac=trend_frac)
     
-    # 1. 전체 판매 트렌드
-    if only_product and all_dates is not None and len(all_dates) > 0:
-        df = df.copy()
-        df['판매일자'] = pd.to_datetime(df['판매일자'])
-        idx = pd.to_datetime(all_dates)
-        daily_sales = df.groupby('판매일자')['실판매'].sum()
-        daily_sales = daily_sales.reindex(idx, fill_value=0).reset_index()
-        daily_sales.columns = ['판매일자', '실판매']
-    else:
-        df = df.copy()
-        df['판매일자'] = pd.to_datetime(df['판매일자'])
+    # 1. 전체 판매 트렌드 or 상품별 판매 트렌드
+    if only_product:
         current_year = datetime.now().year
-        df_current_year = df[df['판매일자'].dt.year == current_year]
-        if not df_current_year.empty:
-            daily_sales = df_current_year.groupby('판매일자')['실판매'].sum().reset_index()
-            daily_sales['판매일자'] = pd.to_datetime(daily_sales['판매일자'])
-            daily_sales = daily_sales.sort_values('판매일자')
-            start_date = pd.Timestamp(f'{current_year}-01-01')
-            end_date = daily_sales['판매일자'].max()
-            full_date_range = pd.date_range(start=start_date, end=end_date, freq='D')
-            daily_sales = daily_sales.set_index('판매일자').reindex(full_date_range, fill_value=0).reset_index()
-            daily_sales.columns = ['판매일자', '실판매']
+        last_year = current_year - 1
+        full_date_range = pd.date_range(start=f'{current_year}-01-01', end=f'{current_year}-12-31', freq='D')
+        df = df.copy()
+        df['판매일자'] = pd.to_datetime(df['판매일자'])
+        daily_sales = df.groupby('판매일자')['실판매'].sum()
+        daily_sales = daily_sales.reindex(full_date_range)
+        dates = full_date_range.strftime('%Y-%m-%d').tolist()
+        # 데이터가 없는 날은 None으로 채움, 값이 있으면 float으로 변환
+        sales_data = [float(v) if v is not None and not pd.isna(v) else None for v in daily_sales.values]
+
+        # --- 추세선 계산 (LOWESS 기반 상/하/중) ---
+        valid_indices = [i for i, v in enumerate(sales_data) if v is not None]
+        valid_sales = [sales_data[i] for i in valid_indices]
+        def pad_trend(trend):
+            arr = [None] * len(sales_data)
+            for idx, v in zip(valid_indices, trend):
+                arr[idx] = float(v) if v is not None else None
+            return list(arr)
+        if valid_sales:
+            low_trend = pad_trend(trend_calculator.lower_trend(valid_sales))
+            high_trend = pad_trend(trend_calculator.upper_trend(valid_sales))
+            mid_trend = pad_trend(trend_calculator.mid_trend(valid_sales))
         else:
-            daily_sales = pd.DataFrame({'판매일자': [], '실판매': []})
+            low_trend = high_trend = mid_trend = [None] * len(sales_data)
 
-    daily_sales_nonzero = daily_sales[daily_sales['실판매'] != 0]
-    dates = daily_sales_nonzero['판매일자'].dt.strftime('%Y-%m-%d').tolist() if not daily_sales_nonzero.empty else []
-    sales_data = daily_sales_nonzero['실판매'].tolist() if not daily_sales_nonzero.empty else []
-
-    # --- 추세선 계산 (LOWESS 기반 상/하/중) ---
-    if not daily_sales_nonzero.empty:
-        sales_nonzero = daily_sales_nonzero['실판매'].values
-        low_trend = trend_calculator.lower_trend(sales_nonzero)
-        high_trend = trend_calculator.upper_trend(sales_nonzero)
-        mid_trend = trend_calculator.mid_trend(sales_nonzero)
+        trend_data = {
+            'low': low_trend,
+            'high': high_trend,
+            'mid': mid_trend
+        }
+        # 전년도 추세선 계산 및 시리즈 추가
+        trend_last_year = get_yearly_trend(df, last_year, trend_calculator)
     else:
-        low_trend = high_trend = mid_trend = np.array([])
-
-    trend_data = {
-        'low': low_trend.tolist() if len(low_trend) > 0 else [],
-        'high': high_trend.tolist() if len(high_trend) > 0 else [],
-        'mid': mid_trend.tolist() if len(mid_trend) > 0 else []
-    }
+        # 전체 판매 트렌드는 기존 방식 유지 (데이터가 있는 날짜만 x축)
+        df = df.copy()
+        df['판매일자'] = pd.to_datetime(df['판매일자'])
+        daily_sales = df.groupby('판매일자')['실판매'].sum().reset_index()
+        daily_sales = daily_sales[daily_sales['실판매'] != 0]
+        dates = daily_sales['판매일자'].dt.strftime('%Y-%m-%d').tolist() if not daily_sales.empty else []
+        sales_data = [float(v) if v is not None and not pd.isna(v) else None for v in (daily_sales['실판매'].tolist() if not daily_sales.empty else [])]
+        if sales_data:
+            low_trend = [float(v) if v is not None else None for v in trend_calculator.lower_trend(sales_data)]
+            high_trend = [float(v) if v is not None else None for v in trend_calculator.upper_trend(sales_data)]
+            mid_trend = [float(v) if v is not None else None for v in trend_calculator.mid_trend(sales_data)]
+        else:
+            low_trend = high_trend = mid_trend = []
+        trend_data = {
+            'low': low_trend if len(low_trend) > 0 else [],
+            'high': high_trend if len(high_trend) > 0 else [],
+            'mid': mid_trend if len(mid_trend) > 0 else []
+        }
 
     charts['sales_trend'] = {
         'type': 'line',
         'title': '판매 트렌드',
         'data': {
             'dates': dates,
-            'sales': sales_data,
-            'trends': trend_data
+            'sales': safe_list(sales_data),
+            'trends': {
+                'low': safe_list(trend_data['low']),
+                'high': safe_list(trend_data['high']),
+                'mid': safe_list(trend_data['mid'])
+            }
         },
         'config': {
+            'legend': {'show': True},
             'xAxis': {'type': 'category', 'name': '월', 'data': dates},
             'yAxis': {'type': 'value', 'name': '판매량'},
             'series': [
                 {
                     'name': '실판매',
                     'type': 'line',
-                    'data': sales_data,
+                    'data': safe_list(sales_data),
                     'symbol': 'circle',
                     'symbolSize': 4,
-                    'lineStyle': {'width': 2}
+                    'lineStyle': {'width': 2},
+                    'connectNulls': True
                 }
             ]
         }
     }
-
-    if len(trend_data['low']) > 0:
+    if only_product:
+        # 전년도 추세선 시리즈 추가
+        charts['sales_trend']['config']['series'].extend([
+            {
+                'name': '저점 추세(LOWESS, 전년도)',
+                'type': 'line',
+                'data': safe_list(trend_last_year['low']),
+                'lineStyle': {'color': '#b0b0b0'},
+                'symbol': 'none',
+                'connectNulls': True
+            },
+            {
+                'name': '고점 추세(LOWESS, 전년도)',
+                'type': 'line',
+                'data': safe_list(trend_last_year['high']),
+                'lineStyle': {'color': '#b0b0b0'},
+                'symbol': 'none',
+                'connectNulls': True
+            },
+            {
+                'name': '중위 추세(LOWESS, 전년도)',
+                'type': 'line',
+                'data': safe_list(trend_last_year['mid']),
+                'lineStyle': {'color': '#b0b0b0'},
+                'symbol': 'none',
+                'connectNulls': True
+            }
+        ])
+    if (only_product and any(v is not None for v in trend_data['low'])) or (not only_product and len(trend_data['low']) > 0):
         charts['sales_trend']['config']['series'].extend([
             {
                 'name': '저점 추세(LOWESS)',
                 'type': 'line',
-                'data': trend_data['low'],
+                'data': safe_list(trend_data['low']),
                 'lineStyle': {'type': 'dashed', 'color': '#5470c6'},
-                'symbol': 'none'
+                'symbol': 'none',
+                'connectNulls': True
             },
             {
                 'name': '고점 추세(LOWESS)', 
                 'type': 'line',
-                'data': trend_data['high'],
+                'data': safe_list(trend_data['high']),
                 'lineStyle': {'type': 'dashed', 'color': '#91cc75'},
-                'symbol': 'none'
+                'symbol': 'none',
+                'connectNulls': True
             },
             {
                 'name': '중위 추세(LOWESS)',
                 'type': 'line', 
-                'data': trend_data['mid'],
+                'data': safe_list(trend_data['mid']),
                 'lineStyle': {'type': 'dashed', 'color': '#ee6666'},
-                'symbol': 'none'
+                'symbol': 'none',
+                'connectNulls': True
             }
         ])
 
@@ -518,6 +594,15 @@ def create_visualizations(df, only_product=False, all_dates=None, trend_window=7
                 }
             }
     
+    # charts['sales_trend'] 생성 후, 반환 직전 안전하게 변환
+    charts['sales_trend']['data']['sales'] = safe_list(charts['sales_trend']['data']['sales'])
+    charts['sales_trend']['data']['trends']['low'] = safe_list(charts['sales_trend']['data']['trends']['low'])
+    charts['sales_trend']['data']['trends']['high'] = safe_list(charts['sales_trend']['data']['trends']['high'])
+    charts['sales_trend']['data']['trends']['mid'] = safe_list(charts['sales_trend']['data']['trends']['mid'])
+    for s in charts['sales_trend']['config']['series']:
+        if 'data' in s:
+            s['data'] = safe_list(s['data'])
+
     return charts
 
 # ECharts 설정을 JSON으로 변환하는 헬퍼 함수
