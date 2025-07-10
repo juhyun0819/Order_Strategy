@@ -68,7 +68,7 @@ def delete_by_date(date):
     deleted_count = cursor.rowcount
     conn.commit()
     conn.close()
-    return deleted_count 
+    return deleted_count
 
 def init_clients_table():
     conn = sqlite3.connect('db.sqlite3')
@@ -76,16 +76,30 @@ def init_clients_table():
     c.execute('''
         CREATE TABLE IF NOT EXISTS pareto_clients (
             product TEXT PRIMARY KEY,
-            client_count INTEGER
+            client_count INTEGER,
+            updated_at TEXT
+        )
+    ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS pareto_clients_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            product TEXT,
+            client_count INTEGER,
+            updated_at TEXT
         )
     ''')
     conn.commit()
     conn.close()
 
 def set_client_count(product, count):
+    from datetime import datetime
     conn = sqlite3.connect('db.sqlite3')
     c = conn.cursor()
-    c.execute('REPLACE INTO pareto_clients (product, client_count) VALUES (?, ?)', (product, count))
+    today = datetime.now().strftime('%Y-%m-%d')
+    # 최신값은 pareto_clients에 upsert
+    c.execute('REPLACE INTO pareto_clients (product, client_count, updated_at) VALUES (?, ?, ?)', (product, count, today))
+    # 이력은 append
+    c.execute('INSERT INTO pareto_clients_history (product, client_count, updated_at) VALUES (?, ?, ?)', (product, count, today))
     conn.commit()
     conn.close()
 
@@ -94,5 +108,21 @@ def get_client_counts():
     c = conn.cursor()
     c.execute('SELECT product, client_count FROM pareto_clients')
     data = dict(c.fetchall())
+    conn.close()
+    return data
+
+def get_client_update_dates():
+    conn = sqlite3.connect('db.sqlite3')
+    c = conn.cursor()
+    c.execute('SELECT product, updated_at FROM pareto_clients')
+    data = dict(c.fetchall())
+    conn.close()
+    return data
+
+def get_client_history(product):
+    conn = sqlite3.connect('db.sqlite3')
+    c = conn.cursor()
+    c.execute('SELECT updated_at, client_count FROM pareto_clients_history WHERE product = ? ORDER BY updated_at', (product,))
+    data = c.fetchall()
     conn.close()
     return data 

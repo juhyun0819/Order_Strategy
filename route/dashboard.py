@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
-from service.db import load_from_db, save_to_db, delete_by_date, reset_db, init_clients_table, set_client_count, get_client_counts
+from service.db import load_from_db, save_to_db, delete_by_date, reset_db, init_clients_table, set_client_count, get_client_counts, get_client_update_dates
 from service.analysis import generate_inventory_alerts, generate_a_grade_alerts, get_pareto_products, get_product_stats
-from service.visualization import create_visualizations
+from service.visualization import create_visualizations, create_client_sales_chart
 from datetime import datetime
 import pandas as pd
 import json
@@ -16,6 +16,16 @@ def root():
 def dashboard():
     # 파레토 거래처 테이블 초기화 (최초 1회)
     init_clients_table()
+
+    # 대시보드 렌더링 (GET)
+    df = load_from_db()
+    # '일반상품' 제외
+    if not df.empty:
+        df = df[df['품명'] != '(일반상품)']
+    product_list = sorted(df['품명'].unique()) if not df.empty else []
+    all_dates = sorted(pd.to_datetime(df['판매일자']).unique()) if not df.empty else []
+    selected_product = request.args.get('product')
+    search_query = request.args.get('search', '')
 
     # 거래처 수 저장 처리 (POST, 상품 세부 페이지)
     if request.method == 'POST' and selected_product and 'client_count_form' in request.form:
@@ -59,15 +69,11 @@ def dashboard():
         # POST 처리 후 반드시 redirect
         return redirect(url_for('dashboard.dashboard'))
     
-    # 대시보드 렌더링 (GET)
-    df = load_from_db()
-    # '일반상품' 제외
-    if not df.empty:
-        df = df[df['품명'] != '(일반상품)']
-    product_list = sorted(df['품명'].unique()) if not df.empty else []
-    all_dates = sorted(pd.to_datetime(df['판매일자']).unique()) if not df.empty else []
-    selected_product = request.args.get('product')
-    search_query = request.args.get('search', '')
+    # 파레토 상품별 거래처 수 불러오기 (먼저 정의)
+    client_counts = get_client_counts()
+    client_update_dates = get_client_update_dates()
+    current_client_count = client_counts.get(selected_product) if selected_product else 0
+    current_client_update = client_update_dates.get(selected_product) if selected_product else None
     
     if selected_product and selected_product in product_list:
         filtered_df = df[df['품명'] == selected_product]
@@ -85,8 +91,10 @@ def dashboard():
         }
         # 상품별 통계 추가
         stats.update(get_product_stats(df, selected_product))
-        plots = create_visualizations(filtered_df, only_product=True, all_dates=all_dates)
-        charts = create_visualizations(df)  # 전체 데이터용
+        charts = create_visualizations(df, client_count=current_client_count, product=selected_product)  # 전체 데이터용
+        
+        # 거래처 수 차트 생성
+        client_chart = create_client_sales_chart(df, selected_product, current_client_count, all_dates)
         
         alert_df = None
         a_grade_alert_df = None
@@ -112,7 +120,6 @@ def dashboard():
             'sales_dates': filtered_df['판매일자'].nunique()
         }
         charts = create_visualizations(filtered_df)
-        plots = None
         
         alert_rows = generate_inventory_alerts(df)
         alert_df = pd.DataFrame(alert_rows) if alert_rows else None
@@ -131,19 +138,17 @@ def dashboard():
         unique_dates = sorted(df['판매일자'].unique())
     
     sidebar_products = get_pareto_products(df) if not df.empty else []
-    # 파레토 상품별 거래처 수 불러오기
-    client_counts = get_client_counts()
-    # 현재 상품의 거래처 수
-    current_client_count = client_counts.get(selected_product) if selected_product else None
     
     return render_template('dashboard.html',
-        charts=charts, plots=plots, stats=stats, product_list=product_list,
+        charts=charts, stats=stats, product_list=product_list,
         selected_product=selected_product, alert_df=alert_df, a_grade_alert_df=a_grade_alert_df, 
         search_query=search_query, last_year=last_year, unique_dates=unique_dates,
         sidebar_products=sidebar_products,
         sidebar_products_json=json.dumps(sidebar_products),
         client_counts=client_counts,
-        current_client_count=current_client_count
+        current_client_count=current_client_count,
+        current_client_update=current_client_update,
+        client_chart=client_chart if 'client_chart' in locals() else None
     )
 
 @dashboard_bp.route('/dashboard/plot')
@@ -159,9 +164,9 @@ def dashboard_plot():
             'product_current_stock': int(filtered_df['현재고'].sum()),
             'product_7days_sales': int(filtered_df.tail(7)['실판매'].sum()),
         }
-        plots = create_visualizations(filtered_df, only_product=True, all_dates=all_dates)
+        charts = create_visualizations(filtered_df, only_product=True, all_dates=all_dates)
         return jsonify({
-            'plot': plots['sales_trend'],
+            'plot': charts['sales_trend'],
             'stats': stats,
             'product': product
         })

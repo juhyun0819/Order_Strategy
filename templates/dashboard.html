@@ -119,7 +119,11 @@
                             <i class="fas fa-tshirt text-blue-600"></i>
                         </div>
                         <div class="flex-1 flex items-center justify-between">
-                            <h2 class="text-lg font-semibold text-gray-900 inline-block">{{ selected_product }}</h2>
+                            <h2 class="text-lg font-semibold text-gray-900 inline-block">{{ selected_product }}
+                            {% if current_client_update %}
+                                <span class="text-xs text-gray-400 ml-2">입력일: {{ current_client_update }}</span>
+                            {% endif %}
+                            </h2>
                             <!-- 거래처 수 입력란 (오른쪽 끝) -->
                             <form method="post" class="flex items-center" style="margin-left: auto;">
                                 <input type="hidden" name="client_count_form" value="1">
@@ -143,15 +147,29 @@
                             <div class="text-2xl font-bold text-pink-700">{{ stats.product_7days_sales }}</div>
                         </div>
                     </div>
-                    {% if plots.sales_trend %}
+                    {% if charts.sales_trend %}
                     <div class="mb-6">
                         <h3 class="text-lg font-semibold text-gray-900 mb-2">판매 추세</h3>
-                        <div id="echart-product-sales-trend" style="width:100%;height:300px;"></div>
+                        <div id="echart-product-sales-trend" style="width:100%;height:400px;"></div>
                     </div>
                     <script>
                     document.addEventListener('DOMContentLoaded', function() {
-                        var option_product_sales_trend = {{ plots.sales_trend.config|tojson }};
-                        option_product_sales_trend.tooltip = {trigger: 'axis'};
+                        var option_product_sales_trend = {{ charts.sales_trend.config|tojson }};
+                        option_product_sales_trend.title = option_product_sales_trend.title || {};
+                        option_product_sales_trend.title.top = 10;
+                        option_product_sales_trend.legend = option_product_sales_trend.legend || {};
+                        option_product_sales_trend.legend.top = 50;
+                        option_product_sales_trend.grid = option_product_sales_trend.grid || {};
+                        option_product_sales_trend.grid.top = 100;
+                        // 툴팁 포맷터 (날짜+값)
+                        option_product_sales_trend.tooltip.formatter = function(params) {
+                            var date = new Date(params[0].value[0]);
+                            var txt = date.getFullYear() + '-' + (date.getMonth()+1) + '-' + date.getDate() + '<br>';
+                            params.forEach(function(p) {
+                                txt += p.marker + p.seriesName + ': ' + p.value[1] + '<br>';
+                            });
+                            return txt;
+                        };
                         var chartDomProduct = document.getElementById('echart-product-sales-trend');
                         if (chartDomProduct) {
                             var myChartProduct = echarts.init(chartDomProduct);
@@ -541,10 +559,10 @@
                     var option_sales_trend = {{ charts.sales_trend.config|tojson }};
                     option_sales_trend.title = {text: '{{ charts.sales_trend.title }}', left: 'center'};
                     option_sales_trend.tooltip = {trigger: 'axis'};
-                    var chartDom1 = document.getElementById('echart-sales-trend');
-                    if (chartDom1) {
-                        var myChart1 = echarts.init(chartDom1);
-                        myChart1.setOption(option_sales_trend);
+                    var chartDom = document.getElementById('echart-sales-trend');
+                    if (chartDom) {
+                        var myChart = echarts.init(chartDom);
+                        myChart.setOption(option_sales_trend);
                     }
                     {% endif %}
                     // 상품별 판매
