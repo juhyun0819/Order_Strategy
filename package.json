@@ -9,7 +9,7 @@
     "build:css": "tailwindcss -i ./static/style.css -o ./static/output.css --watch",
     "build:css:prod": "tailwindcss -i ./static/style.css -o ./static/output.css --minify",
     "install:python": "pip install -r requirements.txt",
-    "setup": "npm install && pip install -r requirements.txt"
+    "setup": "npm install"
   },
   "keywords": [
     "flask",
