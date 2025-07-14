@@ -47,6 +47,10 @@ def dashboard():
                         flash(f'파일 {file.filename}: 필수 컬럼이 누락되었습니다.', 'error')
                         continue
                     upload_date = datetime.now().strftime('%Y-%m-%d')
+                    # '실판매'와 '금액'이 모두 포함된 컬럼은 모두 제거
+                    drop_cols = [col for col in df.columns if '실판매' in col and '금액' in col]
+                    if drop_cols:
+                        df = df.drop(columns=drop_cols)
                     df = df.iloc[:-1]  # 마지막 행 제거
                     save_to_db(df, upload_date, file.filename)
                     sales_date = extract_date_from_filename(file.filename)
