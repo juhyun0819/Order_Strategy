@@ -650,6 +650,8 @@
               var option_sales_trend = {{ charts.sales_trend.config|tojson }};
               option_sales_trend.title = {text: '{{ charts.sales_trend.title }}', left: 'center'};
               option_sales_trend.tooltip = {trigger: 'axis'};
+              option_sales_trend.legend = option_sales_trend.legend || {};
+              option_sales_trend.legend.top = 'bottom';
               var chartDom1 = document.getElementById('echart-sales-trend');
               if (chartDom1) {
                   var myChart1 = echarts.init(chartDom1);

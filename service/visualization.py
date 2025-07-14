@@ -430,125 +430,95 @@ def create_visualizations(df, only_product=False, all_dates=None, trend_window=7
     if not df.empty:
         df_copy = df.copy()
         df_copy['판매일자'] = pd.to_datetime(df_copy['판매일자'])
-        
+
+        # 올해(예: 2025)와 전년도(예: 2024)만 plot
         df_current_year = df_copy[df_copy['판매일자'].dt.year == current_year]
-        
-        if not df_current_year.empty:
+        df_last_year = df_copy[df_copy['판매일자'].dt.year == last_year]
+
+        # legend와 series 순서 명확히 지정
+        legend_data = []
+        series_list = []
+
+        if not df_current_year.empty and df_current_year['실판매'].sum() > 0:
             df_current_year['주차'] = df_current_year['판매일자'].dt.isocalendar().week
             weekly_sales = df_current_year.groupby('주차')['실판매'].sum().reset_index()
             weekly_sales = weekly_sales.sort_values('주차')
-            
+            legend_data.append(f'실판매({current_year})')
+            series_list.append({
+                'name': f'실판매({current_year})',
+                'type': 'line',
+                'data': weekly_sales['실판매'].tolist(),
+                'symbol': 'circle',
+                'symbolSize': 4,
+                'lineStyle': {'width': 2, 'color': '#5470c6'},
+                'connectNulls': True
+            })
             last_week = weekly_sales[weekly_sales['실판매'] > 0]['주차'].max() if (weekly_sales['실판매'] > 0).any() else 1
-            
-            # 월별 표시를 위한 주차 변환
-            month_ticks = [1, 5, 9, 13, 17, 21, 25, 29, 33, 37, 41, 45]
-            month_labels = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월']
-            
-            charts['weekly_sales_chart'] = {
+        else:
+            weekly_sales = None
+            last_week = 1
+
+        if not df_last_year.empty and df_last_year['실판매'].sum() > 0:
+            df_last_year['주차'] = df_last_year['판매일자'].dt.isocalendar().week
+            weekly_sales_last = df_last_year.groupby('주차')['실판매'].sum().reset_index()
+            weekly_sales_last = weekly_sales_last.sort_values('주차')
+            legend_data.append(f'실판매({last_year})')
+            series_list.append({
+                'name': f'실판매({last_year})',
                 'type': 'line',
-                'title': '주별 판매량',
-                'data': {
-                    'weeks': weekly_sales['주차'][:last_week].tolist(),
-                    'values': weekly_sales['실판매'][:last_week].tolist()
-                },
-                'config': {
-                    'xAxis': {
-                        'type': 'category',
-                        'name': '월',
-                        'data': weekly_sales['주차'][:last_week].tolist(),
-                        'axisLabel': {'rotate': 30, 'interval': 0}
-                    },
-                    'yAxis': {'type': 'value', 'name': '판매량'},
-                    'series': [{
-                        'name': '판매량',
-                        'type': 'line',
-                        'data': weekly_sales['실판매'][:last_week].tolist(),
-                        'symbol': 'circle',
-                        'symbolSize': 4,
-                        'lineStyle': {'width': 2, 'color': '#4ECDC4'}
-                    }]
-                }
-            }
-    
-    # 7. 전년도 분석
-    if not df.empty:
-        df_copy = df.copy()
-        df_copy['판매일자'] = pd.to_datetime(df_copy['판매일자'])
-        max_year = df_copy['판매일자'].dt.year.max()
-        last_year = max_year - 1
-        lastyear_df = df_copy[df_copy['판매일자'].dt.year == last_year]
+                'data': weekly_sales_last['실판매'].tolist(),
+                'symbol': 'circle',
+                'symbolSize': 4,
+                'lineStyle': {'width': 2, 'color': '#91cc75'},
+                'connectNulls': True
+            })
+        else:
+            weekly_sales_last = None
+
+        # 월별 표시를 위한 주차 변환
+        month_ticks = [1, 5, 9, 13, 17, 21, 25, 29, 33, 37, 41, 45]
+        month_labels = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월']
         
-        if not lastyear_df.empty:
-            # 전년도 일별 판매 트렌드
-            start_date = pd.Timestamp(f'{last_year}-01-01')
-            end_date = pd.Timestamp(f'{last_year}-12-31')
-            full_date_range = pd.date_range(start=start_date, end=end_date, freq='D')
-            lastyear_daily = lastyear_df.groupby('판매일자')['실판매'].sum().reset_index()
-            lastyear_daily = lastyear_daily.set_index('판매일자').reindex(full_date_range, fill_value=0).reset_index()
-            lastyear_daily.columns = ['판매일자', '실판매']
-            
-            x = np.arange(len(lastyear_daily))
-            sales = lastyear_daily['실판매'].values
-            roll_min = pd.Series(sales).rolling(7, min_periods=1).min()
-            roll_max = pd.Series(sales).rolling(7, min_periods=1).max()
-            low_trend = np.poly1d(np.polyfit(x, roll_min, 1))(x)
-            high_trend = np.poly1d(np.polyfit(x, roll_max, 1))(x)
-            mid_trend = (low_trend + high_trend) / 2
-            
-            dates_ly = lastyear_daily['판매일자'].dt.strftime('%Y-%m-%d').tolist()
-            
-            charts['lastyear_daily_trend'] = {
-                'type': 'line',
-                'title': f'{last_year}년 일별 판매 트렌드',
-                'data': {
-                    'dates': dates_ly,
-                    'sales': sales.tolist(),
-                    'mid_trend': mid_trend.tolist()
+        charts['weekly_sales_chart'] = {
+            'type': 'line',
+            'title': '주별 판매량',
+            'data': {
+                'weeks': weekly_sales['주차'][:last_week].tolist() if weekly_sales is not None else [],
+                'values': weekly_sales['실판매'][:last_week].tolist() if weekly_sales is not None else []
+            },
+            'config': {
+                'xAxis': {
+                    'type': 'category',
+                    'name': '월',
+                    'data': weekly_sales['주차'][:last_week].tolist() if weekly_sales is not None else [],
+                    'axisLabel': {'rotate': 30, 'interval': 0}
                 },
-                'config': {
-                    'xAxis': {'type': 'category', 'name': '월', 'data': dates_ly},
-                    'yAxis': {'type': 'value', 'name': '판매량'},
-                    'series': [
-                        {
-                            'name': '실판매',
-                            'type': 'line',
-                            'data': sales.tolist(),
-                            'symbol': 'circle',
-                            'symbolSize': 4,
-                            'lineStyle': {'color': '#FF6B6B'}
-                        },
-                        {
-                            'name': '중위 추세',
-                            'type': 'line',
-                            'data': mid_trend.tolist(),
-                            'lineStyle': {'type': 'dashed', 'color': '#ee6666'},
-                            'symbol': 'none'
-                        }
-                    ]
-                }
+                'yAxis': {'type': 'value', 'name': '판매량'},
+                'series': series_list,
+                'legend': {'data': legend_data}
             }
-            
-            # 전년도 주별 판매 트렌드
-            lastyear_df['주차'] = lastyear_df['판매일자'].dt.isocalendar().week
-            weekly_sales_ly = lastyear_df.groupby('주차')['실판매'].sum().reset_index()
-            full_weeks = pd.DataFrame({'주차': range(1, 53)})
-            weekly_sales_ly = weekly_sales_ly.merge(full_weeks, on='주차', how='right').fillna(0)
-            weekly_sales_ly = weekly_sales_ly.sort_values('주차')
+        }
+
+        # 전년도 plot
+        if not df_last_year.empty and df_last_year['실판매'].sum() > 0:
+            df_last_year['주차'] = df_last_year['판매일자'].dt.isocalendar().week
+            weekly_sales_last = df_last_year.groupby('주차')['실판매'].sum().reset_index()
+            weekly_sales_last = weekly_sales_last.sort_values('주차')
             
             charts['lastyear_weekly_trend'] = {
                 'type': 'line',
                 'title': f'{last_year}년 주별 판매 트렌드',
                 'data': {
-                    'weeks': weekly_sales_ly['주차'].tolist(),
-                    'values': weekly_sales_ly['실판매'].tolist()
+                    'weeks': weekly_sales_last['주차'].tolist(),
+                    'values': weekly_sales_last['실판매'].tolist()
                 },
                 'config': {
-                    'xAxis': {'type': 'category', 'name': '월', 'data': weekly_sales_ly['주차'].tolist()},
+                    'xAxis': {'type': 'category', 'name': '월', 'data': weekly_sales_last['주차'].tolist()},
                     'yAxis': {'type': 'value', 'name': '판매량'},
                     'series': [{
                         'name': '판매량',
                         'type': 'line',
-                        'data': weekly_sales_ly['실판매'].tolist(),
+                        'data': weekly_sales_last['실판매'].tolist(),
                         'symbol': 'circle',
                         'symbolSize': 4,
                         'lineStyle': {'color': '#4ECDC4'}
@@ -557,27 +527,8 @@ def create_visualizations(df, only_product=False, all_dates=None, trend_window=7
             }
             
             # 예측값 계산
-            slope, intercept = np.polyfit(x, mid_trend, 1)
-            forecast_x = np.arange(len(lastyear_daily), len(lastyear_daily) + 7)
-            forecast_dates = pd.date_range(start=lastyear_daily['판매일자'].iloc[-1] + timedelta(days=1), periods=7)
-            forecast_values = [int(round(slope * xi + intercept)) for xi in forecast_x]
-            
-            # 신뢰도 계산
-            recent_n = min(7, len(mid_trend))
-            if recent_n > 0:
-                actual = sales[-recent_n:]
-                pred_mid = mid_trend[-recent_n:]
-                mae = np.mean(np.abs(actual - pred_mid))
-                avg_sales = np.mean(actual)
-                confidence = max(0, 1 - (mae / (avg_sales + 1e-6)))
-                confidence = int(round(confidence * 100))
-            else:
-                confidence = 70
-            
-            charts['lastyear_forecast_table'] = [
-                {'date': d.strftime('%Y-%m-%d'), 'predicted_sales': v, 'confidence': confidence}
-                for d, v in zip(forecast_dates, forecast_values)
-            ]
+            # (전년도 분석 코드가 삭제되었으므로, x, lastyear_daily, mid_trend, sales 등 관련 예측 및 신뢰도 계산 코드도 함께 삭제)
+            pass # 예측값 계산 코드 제거
     
     # 8. 년도별 판매량 그래프
     if not df.empty:
