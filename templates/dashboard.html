@@ -1,14 +1,23 @@
 <!DOCTYPE html>
 <html lang="ko" class="light">
   <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>여성복 의류 도매 - 대시보드</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link href="{{ url_for('static', filename='output.css') }}" rel="stylesheet">
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="{{ url_for('static', filename='output.css') }}"
+      rel="stylesheet"
+    />
     <style>
       .th-sort {
         display: inline-flex;
@@ -173,6 +182,35 @@
                 </div>
               </div>
             </div>
+            <!-- 비교 상품 업로드 UI -->
+            <form
+              method="post"
+              enctype="multipart/form-data"
+              class="mb-6 flex items-center gap-4"
+              style="background: #f8fafc; border-radius: 0.5rem; padding: 1rem"
+            >
+              <label
+                for="compare_file"
+                class="text-sm font-semibold text-gray-700"
+                >비교 상품 엑셀 업로드</label
+              >
+              <input
+                type="file"
+                name="compare_file"
+                id="compare_file"
+                accept=".xls,.xlsx"
+                class="form-control"
+                required
+              />
+              <button
+                type="submit"
+                name="compare_upload"
+                value="1"
+                class="btn btn-primary px-4"
+              >
+                업로드
+              </button>
+            </form>
             {% if plots.sales_trend %}
             <div class="mb-6">
               <h3 class="text-lg font-semibold text-gray-900 mb-2">
@@ -416,151 +454,272 @@
         {% if alert_df is not none and not alert_df.empty %}
         <div class="mb-8">
           <div class="bg-white rounded-xl shadow-sm border">
-              <div class="p-6 border-b">
-                  <div class="flex items-center space-x-3">
-                      <div class="h-10 w-10 rounded-lg bg-red-100 flex items-center justify-center">
-                          <i class="fas fa-exclamation-triangle text-red-600"></i>
-                      </div>
-                      <div>
-                          <h2 class="text-lg font-semibold text-gray-900">재고 예측/발주 알림</h2>
-                          <p class="text-sm text-gray-500">재고 부족 위험 상품들을 확인하세요</p>
-                      </div>
-                  </div>
+            <div class="p-6 border-b">
+              <div class="flex items-center space-x-3">
+                <div
+                  class="h-10 w-10 rounded-lg bg-red-100 flex items-center justify-center"
+                >
+                  <i class="fas fa-exclamation-triangle text-red-600"></i>
+                </div>
+                <div>
+                  <h2 class="text-lg font-semibold text-gray-900">
+                    재고 예측/발주 알림
+                  </h2>
+                  <p class="text-sm text-gray-500">
+                    재고 부족 위험 상품들을 확인하세요
+                  </p>
+                </div>
               </div>
-              <div class="overflow-x-auto max-h-96 overflow-y-auto">
-                  <table class="table" id="alertTable">
-                      <thead>
-                          <tr>
-                              <th class="sortable-header sticky top-0 bg-white z-10 align-middle" data-sort="date">
-                                  <span class="flex items-center justify-start">
-                                      날짜
-                                      <span class="sort-arrows ml-3 -mt-1">
-                                          <i class="fas fa-chevron-up sort-arrow" data-direction="asc"></i>
-                                          <i class="fas fa-chevron-down sort-arrow" data-direction="desc"></i>
-                                      </span>
-                                  </span>
-                              </th>
-                              <th class="sortable-header sticky top-0 bg-white z-10 align-middle" data-sort="product">
-                                  <span class="flex items-center justify-start">
-                                      상품명
-                                      <span class="sort-arrows ml-3 -mt-1">
-                                          <i class="fas fa-chevron-up sort-arrow" data-direction="asc"></i>
-                                          <i class="fas fa-chevron-down sort-arrow" data-direction="desc"></i>
-                                      </span>
-                                  </span>
-                              </th>
-                              <th class="sortable-header sticky top-0 bg-white z-10 align-middle" data-sort="trend">
-                                  <span class="flex items-center justify-start">
-                                      최근 판매 경향
-                                      <span class="sort-arrows ml-3 -mt-1">
-                                          <i class="fas fa-chevron-up sort-arrow" data-direction="asc"></i>
-                                          <i class="fas fa-chevron-down sort-arrow" data-direction="desc"></i>
-                                      </span>
-                                  </span>
-                              </th>
-                              <th class="sortable-header sticky top-0 bg-white z-10 align-middle" data-sort="baseline">
-                                  <span class="flex items-center justify-start">
-                                      중간선
-                                      <span class="sort-arrows ml-3 -mt-1">
-                                          <i class="fas fa-chevron-up sort-arrow" data-direction="asc"></i>
-                                          <i class="fas fa-chevron-down sort-arrow" data-direction="desc"></i>
-                                      </span>
-                                  </span>
-                              </th>
-                              <th class="sortable-header sticky top-0 bg-white z-10 align-middle" data-sort="current">
-                                  <span class="flex items-center justify-center">
-                                      현재고
-                                      <span class="sort-arrows ml-3 -mt-1">
-                                          <i class="fas fa-chevron-up sort-arrow" data-direction="asc"></i>
-                                          <i class="fas fa-chevron-down sort-arrow" data-direction="desc"></i>
-                                      </span>
-                                  </span>
-                              </th>
-                              <th class="sortable-header sticky top-0 bg-white z-10 align-middle" data-sort="shortage">
-                                  <span class="flex items-center justify-center">
-                                      부족수량
-                                      <span class="sort-arrows ml-3 -mt-1">
-                                          <i class="fas fa-chevron-up sort-arrow" data-direction="asc"></i>
-                                          <i class="fas fa-chevron-down sort-arrow" data-direction="desc"></i>
-                                      </span>
-                                  </span>
-                              </th>
-                              <th class="sortable-header sticky top-0 bg-white z-10 align-middle" data-sort="order">
-                                  <span class="flex items-center justify-start">
-                                      발주제안
-                                      <span class="sort-arrows ml-3 -mt-1">
-                                          <i class="fas fa-chevron-up sort-arrow" data-direction="asc"></i>
-                                          <i class="fas fa-chevron-down sort-arrow" data-direction="desc"></i>
-                                      </span>
-                                  </span>
-                              </th>
-                              <th class="sortable-header sticky top-0 bg-white z-10 align-middle" data-sort="depletion">
-                                  <span class="flex items-center justify-start">
-                                      소진예상일
-                                      <span class="sort-arrows ml-3 -mt-1">
-                                          <i class="fas fa-chevron-up sort-arrow" data-direction="asc"></i>
-                                          <i class="fas fa-chevron-down sort-arrow" data-direction="desc"></i>
-                                      </span>
-                                  </span>
-                              </th>
-                              <th class="sortable-header sticky top-0 bg-white z-10 align-middle" data-sort="alert">
-                                  <span class="flex items-center justify-start">
-                                      경고등급
-                                      <span class="sort-arrows ml-3 -mt-1">
-                                          <i class="fas fa-chevron-up sort-arrow" data-direction="asc"></i>
-                                          <i class="fas fa-chevron-down sort-arrow" data-direction="desc"></i>
-                                      </span>
-                                  </span>
-                              </th>
-                          </tr>
-                      </thead>
-                      <tbody>
-                          {% for _, row in alert_df.iterrows() %}
-                          <tr>
-                              <td data-sort-value="{{ row['날짜'] }}" data-sort="date">{{ row['날짜'] }}</td>
-                              <td data-sort-value="{{ row['상품명'] }}" data-sort="product">{{ row['상품명'] }}</td>
-                              <td data-sort-value="{{ row['최근 판매 경향'] }}" data-sort="trend">
-                                  {% if row['최근 판매 경향'] == '증가' %}
-                                      <span class="badge badge-primary">증가</span>
-                                  {% elif row['최근 판매 경향'] == '감소' %}
-                                      <span class="badge badge-destructive">감소</span>
-                                  {% else %}
-                                      <span class="badge badge-secondary">유지</span>
-                                  {% endif %}
-                              </td>
-                              <td data-sort-value="{{ row['중간선'] }}" data-sort="baseline">{{ row['중간선'] }}</td>
-                              <td data-sort-value="{{ row['현재고'] }}" data-sort="current">{{ row['현재고'] }}</td>
-                              <td data-sort-value="{{ row['부족수량'] }}" data-sort="shortage">
-                                  {% if row['부족수량'] > 0 %}
-                                      <span class="badge badge-destructive">{{ row['부족수량'] }}</span>
-                                  {% else %}
-                                      <span class="badge badge-primary">0</span>
-                                  {% endif %}
-                              </td>
-                              {%- set order_value = 9999 -%}
-                              {%- if row['발주제안'] is string and '발주 필요' in row['발주제안'] -%}
-                                {%- set order_value = row['발주제안'].split('개')[0]|int -%}
-                              {%- elif row['발주제안'] == '충분' -%}
-                                {%- set order_value = 0 -%}
-                              {%- endif -%}
-                              <td data-sort-value="{{ order_value }}" data-sort="order">{{ row['발주제안'] }}</td>
-                              <td data-sort-value="{{ row['소진예상일'] }}" data-sort="depletion">{{ row['소진예상일'] }}</td>
-                              <td data-sort-value="{{ row['경고등급'] }}" data-sort="alert">
-                                  {% if row['경고등급'] == '위험' %}
-                                      <span class="badge badge-destructive">위험</span>
-                                  {% elif row['경고등급'] == '주의' %}
-                                      <span class="badge badge-secondary">주의</span>
-                                  {% else %}
-                                      <span class="badge badge-primary">안정</span>
-                                  {% endif %}
-                              </td>
-                          </tr>
-                          {% endfor %}
-                      </tbody>
-                  </table>
-              </div>
+            </div>
+            <div class="overflow-x-auto max-h-96 overflow-y-auto">
+              <table class="table" id="alertTable">
+                <thead>
+                  <tr>
+                    <th
+                      class="sortable-header sticky top-0 bg-white z-10 align-middle"
+                      data-sort="date"
+                    >
+                      <span class="flex items-center justify-start">
+                        날짜
+                        <span class="sort-arrows ml-3 -mt-1">
+                          <i
+                            class="fas fa-chevron-up sort-arrow"
+                            data-direction="asc"
+                          ></i>
+                          <i
+                            class="fas fa-chevron-down sort-arrow"
+                            data-direction="desc"
+                          ></i>
+                        </span>
+                      </span>
+                    </th>
+                    <th
+                      class="sortable-header sticky top-0 bg-white z-10 align-middle"
+                      data-sort="product"
+                    >
+                      <span class="flex items-center justify-start">
+                        상품명
+                        <span class="sort-arrows ml-3 -mt-1">
+                          <i
+                            class="fas fa-chevron-up sort-arrow"
+                            data-direction="asc"
+                          ></i>
+                          <i
+                            class="fas fa-chevron-down sort-arrow"
+                            data-direction="desc"
+                          ></i>
+                        </span>
+                      </span>
+                    </th>
+                    <th
+                      class="sortable-header sticky top-0 bg-white z-10 align-middle"
+                      data-sort="trend"
+                    >
+                      <span class="flex items-center justify-start">
+                        최근 판매 경향
+                        <span class="sort-arrows ml-3 -mt-1">
+                          <i
+                            class="fas fa-chevron-up sort-arrow"
+                            data-direction="asc"
+                          ></i>
+                          <i
+                            class="fas fa-chevron-down sort-arrow"
+                            data-direction="desc"
+                          ></i>
+                        </span>
+                      </span>
+                    </th>
+                    <th
+                      class="sortable-header sticky top-0 bg-white z-10 align-middle"
+                      data-sort="baseline"
+                    >
+                      <span class="flex items-center justify-start">
+                        중간선
+                        <span class="sort-arrows ml-3 -mt-1">
+                          <i
+                            class="fas fa-chevron-up sort-arrow"
+                            data-direction="asc"
+                          ></i>
+                          <i
+                            class="fas fa-chevron-down sort-arrow"
+                            data-direction="desc"
+                          ></i>
+                        </span>
+                      </span>
+                    </th>
+                    <th
+                      class="sortable-header sticky top-0 bg-white z-10 align-middle"
+                      data-sort="current"
+                    >
+                      <span class="flex items-center justify-center">
+                        현재고
+                        <span class="sort-arrows ml-3 -mt-1">
+                          <i
+                            class="fas fa-chevron-up sort-arrow"
+                            data-direction="asc"
+                          ></i>
+                          <i
+                            class="fas fa-chevron-down sort-arrow"
+                            data-direction="desc"
+                          ></i>
+                        </span>
+                      </span>
+                    </th>
+                    <th
+                      class="sortable-header sticky top-0 bg-white z-10 align-middle"
+                      data-sort="shortage"
+                    >
+                      <span class="flex items-center justify-center">
+                        부족수량
+                        <span class="sort-arrows ml-3 -mt-1">
+                          <i
+                            class="fas fa-chevron-up sort-arrow"
+                            data-direction="asc"
+                          ></i>
+                          <i
+                            class="fas fa-chevron-down sort-arrow"
+                            data-direction="desc"
+                          ></i>
+                        </span>
+                      </span>
+                    </th>
+                    <th
+                      class="sortable-header sticky top-0 bg-white z-10 align-middle"
+                      data-sort="order"
+                    >
+                      <span class="flex items-center justify-start">
+                        발주제안
+                        <span class="sort-arrows ml-3 -mt-1">
+                          <i
+                            class="fas fa-chevron-up sort-arrow"
+                            data-direction="asc"
+                          ></i>
+                          <i
+                            class="fas fa-chevron-down sort-arrow"
+                            data-direction="desc"
+                          ></i>
+                        </span>
+                      </span>
+                    </th>
+                    <th
+                      class="sortable-header sticky top-0 bg-white z-10 align-middle"
+                      data-sort="depletion"
+                    >
+                      <span class="flex items-center justify-start">
+                        소진예상일
+                        <span class="sort-arrows ml-3 -mt-1">
+                          <i
+                            class="fas fa-chevron-up sort-arrow"
+                            data-direction="asc"
+                          ></i>
+                          <i
+                            class="fas fa-chevron-down sort-arrow"
+                            data-direction="desc"
+                          ></i>
+                        </span>
+                      </span>
+                    </th>
+                    <th
+                      class="sortable-header sticky top-0 bg-white z-10 align-middle"
+                      data-sort="alert"
+                    >
+                      <span class="flex items-center justify-start">
+                        경고등급
+                        <span class="sort-arrows ml-3 -mt-1">
+                          <i
+                            class="fas fa-chevron-up sort-arrow"
+                            data-direction="asc"
+                          ></i>
+                          <i
+                            class="fas fa-chevron-down sort-arrow"
+                            data-direction="desc"
+                          ></i>
+                        </span>
+                      </span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for _, row in alert_df.iterrows() %}
+                  <tr>
+                    <td data-sort-value="{{ row['날짜'] }}" data-sort="date">
+                      {{ row['날짜'] }}
+                    </td>
+                    <td
+                      data-sort-value="{{ row['상품명'] }}"
+                      data-sort="product"
+                    >
+                      {{ row['상품명'] }}
+                    </td>
+                    <td
+                      data-sort-value="{{ row['최근 판매 경향'] }}"
+                      data-sort="trend"
+                    >
+                      {% if row['최근 판매 경향'] == '증가' %}
+                      <span class="badge badge-primary">증가</span>
+                      {% elif row['최근 판매 경향'] == '감소' %}
+                      <span class="badge badge-destructive">감소</span>
+                      {% else %}
+                      <span class="badge badge-secondary">유지</span>
+                      {% endif %}
+                    </td>
+                    <td
+                      data-sort-value="{{ row['중간선'] }}"
+                      data-sort="baseline"
+                    >
+                      {{ row['중간선'] }}
+                    </td>
+                    <td
+                      data-sort-value="{{ row['현재고'] }}"
+                      data-sort="current"
+                    >
+                      {{ row['현재고'] }}
+                    </td>
+                    <td
+                      data-sort-value="{{ row['부족수량'] }}"
+                      data-sort="shortage"
+                    >
+                      {% if row['부족수량'] > 0 %}
+                      <span class="badge badge-destructive"
+                        >{{ row['부족수량'] }}</span
+                      >
+                      {% else %}
+                      <span class="badge badge-primary">0</span>
+                      {% endif %}
+                    </td>
+                    {%- set order_value = 9999 -%} {%- if row['발주제안'] is
+                    string and '발주 필요' in row['발주제안'] -%} {%- set
+                    order_value = row['발주제안'].split('개')[0]|int -%} {%-
+                    elif row['발주제안'] == '충분' -%} {%- set order_value = 0
+                    -%} {%- endif -%}
+                    <td data-sort-value="{{ order_value }}" data-sort="order">
+                      {{ row['발주제안'] }}
+                    </td>
+                    <td
+                      data-sort-value="{{ row['소진예상일'] }}"
+                      data-sort="depletion"
+                    >
+                      {{ row['소진예상일'] }}
+                    </td>
+                    <td
+                      data-sort-value="{{ row['경고등급'] }}"
+                      data-sort="alert"
+                    >
+                      {% if row['경고등급'] == '위험' %}
+                      <span class="badge badge-destructive">위험</span>
+                      {% elif row['경고등급'] == '주의' %}
+                      <span class="badge badge-secondary">주의</span>
+                      {% else %}
+                      <span class="badge badge-primary">안정</span>
+                      {% endif %}
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
           </div>
-      </div>
+        </div>
         {% endif %}
 
         <!-- Charts Section -->
@@ -750,102 +909,108 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // 테이블 정렬 기능 - 완전히 새로 작성
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('=== 정렬 시스템 초기화 ===');
-            
-            const table = document.getElementById('alertTable');
-            if (!table) {
-                console.log('❌ 테이블을 찾을 수 없습니다');
-                return;
-            }
-            
-            console.log('✅ 테이블 발견');
-            
-            // 테이블 헤더에 클릭 이벤트 추가
-            const headers = table.querySelectorAll('th.sortable-header');
-            console.log('정렬 가능한 헤더 개수:', headers.length);
-            
-            headers.forEach(header => {
-                header.style.cursor = 'pointer';
-                header.addEventListener('click', function(e) {
-                    console.log('🔥 헤더 클릭됨:', this.getAttribute('data-sort'));
-                    
-                    const column = this.getAttribute('data-sort');
-                    const currentDirection = this.getAttribute('data-direction') || 'asc';
-                    const newDirection = currentDirection === 'asc' ? 'desc' : 'asc';
-                    
-                    console.log('정렬 컬럼:', column, '방향:', newDirection);
-                    
-                    // 모든 헤더의 방향 초기화
-                    headers.forEach(h => {
-                        h.setAttribute('data-direction', '');
-                        h.style.backgroundColor = '';
-                    });
-                    
-                    // 현재 헤더에 방향 설정
-                    this.setAttribute('data-direction', newDirection);
-                    this.style.backgroundColor = '#f3f4f6';
-                    
-                    // 테이블 정렬 실행
-                    sortTable(table, column, newDirection);
-                });
+      // 테이블 정렬 기능 - 완전히 새로 작성
+      document.addEventListener("DOMContentLoaded", function () {
+        console.log("=== 정렬 시스템 초기화 ===");
+
+        const table = document.getElementById("alertTable");
+        if (!table) {
+          console.log("❌ 테이블을 찾을 수 없습니다");
+          return;
+        }
+
+        console.log("✅ 테이블 발견");
+
+        // 테이블 헤더에 클릭 이벤트 추가
+        const headers = table.querySelectorAll("th.sortable-header");
+        console.log("정렬 가능한 헤더 개수:", headers.length);
+
+        headers.forEach((header) => {
+          header.style.cursor = "pointer";
+          header.addEventListener("click", function (e) {
+            console.log("🔥 헤더 클릭됨:", this.getAttribute("data-sort"));
+
+            const column = this.getAttribute("data-sort");
+            const currentDirection =
+              this.getAttribute("data-direction") || "asc";
+            const newDirection = currentDirection === "asc" ? "desc" : "asc";
+
+            console.log("정렬 컬럼:", column, "방향:", newDirection);
+
+            // 모든 헤더의 방향 초기화
+            headers.forEach((h) => {
+              h.setAttribute("data-direction", "");
+              h.style.backgroundColor = "";
             });
-            
-            function sortTable(table, column, direction) {
-                console.log('🔄 정렬 시작:', column, direction);
-                
-                const tbody = table.querySelector('tbody');
-                const rows = Array.from(tbody.querySelectorAll('tr'));
-                
-                console.log('정렬할 행 개수:', rows.length);
-                
-                rows.sort((a, b) => {
-                    const aCell = a.querySelector(`td[data-sort="${column}"]`);
-                    const bCell = b.querySelector(`td[data-sort="${column}"]`);
-                    
-                    if (!aCell || !bCell) {
-                        console.log('셀을 찾을 수 없음:', column);
-                        return 0;
-                    }
-                    
-                    let aValue = aCell.getAttribute('data-sort-value') || '';
-                    let bValue = bCell.getAttribute('data-sort-value') || '';
-                    
-                    console.log('비교 값:', aValue, 'vs', bValue);
-                    
-                    // 발주제안 컬럼은 숫자로 처리
-                    if (column === 'order') {
-                        aValue = parseInt(aValue) || 0;
-                        bValue = parseInt(bValue) || 0;
-                        return direction === 'asc' ? aValue - bValue : bValue - aValue;
-                    }
-                    
-                    // 숫자 정렬
-                    if (!isNaN(aValue) && !isNaN(bValue) && aValue !== '' && bValue !== '') {
-                        return direction === 'asc' ? 
-                            parseFloat(aValue) - parseFloat(bValue) : 
-                            parseFloat(bValue) - parseFloat(aValue);
-                    }
-                    
-                    // 날짜 정렬
-                    const aDate = new Date(aValue);
-                    const bDate = new Date(bValue);
-                    if (!isNaN(aDate) && !isNaN(bDate)) {
-                        return direction === 'asc' ? aDate - bDate : bDate - aDate;
-                    }
-                    
-                    // 문자열 정렬
-                    return direction === 'asc' ? 
-                        aValue.localeCompare(bValue) : 
-                        bValue.localeCompare(aValue);
-                });
-                
-                // 정렬된 행을 테이블에 다시 추가
-                rows.forEach(row => tbody.appendChild(row));
-                console.log('✅ 정렬 완료');
-            }
+
+            // 현재 헤더에 방향 설정
+            this.setAttribute("data-direction", newDirection);
+            this.style.backgroundColor = "#f3f4f6";
+
+            // 테이블 정렬 실행
+            sortTable(table, column, newDirection);
+          });
         });
+
+        function sortTable(table, column, direction) {
+          console.log("🔄 정렬 시작:", column, direction);
+
+          const tbody = table.querySelector("tbody");
+          const rows = Array.from(tbody.querySelectorAll("tr"));
+
+          console.log("정렬할 행 개수:", rows.length);
+
+          rows.sort((a, b) => {
+            const aCell = a.querySelector(`td[data-sort="${column}"]`);
+            const bCell = b.querySelector(`td[data-sort="${column}"]`);
+
+            if (!aCell || !bCell) {
+              console.log("셀을 찾을 수 없음:", column);
+              return 0;
+            }
+
+            let aValue = aCell.getAttribute("data-sort-value") || "";
+            let bValue = bCell.getAttribute("data-sort-value") || "";
+
+            console.log("비교 값:", aValue, "vs", bValue);
+
+            // 발주제안 컬럼은 숫자로 처리
+            if (column === "order") {
+              aValue = parseInt(aValue) || 0;
+              bValue = parseInt(bValue) || 0;
+              return direction === "asc" ? aValue - bValue : bValue - aValue;
+            }
+
+            // 숫자 정렬
+            if (
+              !isNaN(aValue) &&
+              !isNaN(bValue) &&
+              aValue !== "" &&
+              bValue !== ""
+            ) {
+              return direction === "asc"
+                ? parseFloat(aValue) - parseFloat(bValue)
+                : parseFloat(bValue) - parseFloat(aValue);
+            }
+
+            // 날짜 정렬
+            const aDate = new Date(aValue);
+            const bDate = new Date(bValue);
+            if (!isNaN(aDate) && !isNaN(bDate)) {
+              return direction === "asc" ? aDate - bDate : bDate - aDate;
+            }
+
+            // 문자열 정렬
+            return direction === "asc"
+              ? aValue.localeCompare(bValue)
+              : bValue.localeCompare(aValue);
+          });
+
+          // 정렬된 행을 테이블에 다시 추가
+          rows.forEach((row) => tbody.appendChild(row));
+          console.log("✅ 정렬 완료");
+        }
+      });
       // 키보드 네비게이션 기능
       document.addEventListener("DOMContentLoaded", function () {
         // 현재 선택된 상품이 있는지 확인

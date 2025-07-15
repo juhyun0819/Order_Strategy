@@ -34,8 +34,29 @@ def dashboard():
         flash('거래처 수가 저장되었습니다.', 'success')
         return redirect(url_for('dashboard.dashboard', product=selected_product))
     
-    # 파일 업로드 처리 (POST)
-    if request.method == 'POST':
+    compare_df = None
+    if request.method == 'POST' and 'compare_upload' in request.form:
+        compare_file = request.files.get('compare_file')
+        if compare_file and compare_file.filename.endswith(('xls', 'xlsx')):
+            try:
+                compare_df = pd.read_excel(compare_file)
+                # 컬럼명 표준화 및 변환
+                compare_df.columns = [col.strip() for col in compare_df.columns]
+                rename_map = {}
+                if '거래일자' in compare_df.columns:
+                    rename_map['거래일자'] = '판매일자'
+                if '판매량' in compare_df.columns:
+                    rename_map['판매량'] = '실판매'
+                compare_df = compare_df.rename(columns=rename_map)
+                # 필요한 컬럼만 사용
+                if not {'판매일자', '실판매'}.issubset(compare_df.columns):
+                    raise KeyError(f"엑셀 파일에 '거래일자/판매량' 컬럼이 없습니다. 실제 컬럼명: {compare_df.columns.tolist()}")
+                compare_df = compare_df[['판매일자', '실판매']]
+                compare_df['판매일자'] = pd.to_datetime(compare_df['판매일자'])
+            except Exception as e:
+                flash(f'비교 상품 파일 처리 중 오류: {str(e)}', 'error')
+        # 아래에서 상세페이지 렌더링 (redirect 없이)
+    elif request.method == 'POST':
         files = request.files.getlist('files')
         uploaded_count = 0
         for file in files:
@@ -47,11 +68,10 @@ def dashboard():
                         flash(f'파일 {file.filename}: 필수 컬럼이 누락되었습니다.', 'error')
                         continue
                     upload_date = datetime.now().strftime('%Y-%m-%d')
-                    # '실판매'와 '금액'이 모두 포함된 컬럼은 모두 제거
                     drop_cols = [col for col in df.columns if '실판매' in col and '금액' in col]
                     if drop_cols:
                         df = df.drop(columns=drop_cols)
-                    df = df.iloc[:-1]  # 마지막 행 제거
+                    df = df.iloc[:-1]
                     save_to_db(df, upload_date, file.filename)
                     sales_date = extract_date_from_filename(file.filename)
                     flash(f'파일 {file.filename} 업로드 완료! (판매일자: {sales_date})', 'success')
@@ -62,7 +82,6 @@ def dashboard():
             flash(f'{uploaded_count}개 파일이 성공적으로 업로드되었습니다!', 'success')
         elif not files or all(not file.filename for file in files):
             flash('파일을 선택해주세요.', 'error')
-        # POST 처리 후 반드시 redirect
         return redirect(url_for('dashboard.dashboard'))
     
     # 대시보드 렌더링 (GET)
@@ -90,7 +109,7 @@ def dashboard():
         }
         # 상품별 통계 추가
         stats.update(get_product_stats(df, selected_product))
-        plots = create_visualizations(filtered_df, only_product=True, all_dates=all_dates)
+        plots = create_visualizations(filtered_df, only_product=True, all_dates=all_dates, compare_df=compare_df)
         charts = create_visualizations(df)  # 전체 데이터용
         
         alert_df = None
@@ -148,7 +167,8 @@ def dashboard():
         sidebar_products=sidebar_products,
         sidebar_products_json=json.dumps(sidebar_products),
         client_counts=client_counts,
-        current_client_count=current_client_count
+        current_client_count=current_client_count,
+        compare_df=compare_df
     )
 
 @dashboard_bp.route('/dashboard/plot')

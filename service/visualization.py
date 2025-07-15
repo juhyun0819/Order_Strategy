@@ -62,7 +62,7 @@ def get_yearly_trend(df, year, trend_calculator):
         low_trend = high_trend = mid_trend = [None] * len(sales_data)
     return {'low': low_trend, 'high': high_trend, 'mid': mid_trend}
 
-def create_visualizations(df, only_product=False, all_dates=None, trend_window=7, trend_frac=0.08):
+def create_visualizations(df, only_product=False, all_dates=None, trend_window=7, trend_frac=0.08, compare_df=None):
     current_year = datetime.now().year
     last_year = current_year - 1
     # frac은 0.08로 설정하여 월별 흐름강조
@@ -562,14 +562,12 @@ def create_visualizations(df, only_product=False, all_dates=None, trend_window=7
                 }
             }
     
-    # --- 주별 실판매 및 추세선 (올해/전년도) ---
-    # --- 주별 실판매 및 추세선 (올해/전년도, 일별과 동일 방식) ---
+    # --- 주별 실판매 및 추세선 (올해/전년도, 비교 상품 포함) ---
     if only_product:
         week_range = range(1, 54)
+        # 기존 상품 데이터
         df['주차'] = df['판매일자'].dt.isocalendar().week
-        # 올해 주별 실판매
         weekly_this = df[df['판매일자'].dt.year == current_year].groupby('주차')['실판매'].sum().reindex(week_range, fill_value=0)
-        # 전년도 주별 실판매
         weekly_last = df[df['판매일자'].dt.year == last_year].groupby('주차')['실판매'].sum().reindex(week_range, fill_value=0)
         # LOWESS 기반 추세선 계산 (일별과 동일)
         def pad_trend_week(trend, valid_indices, length):
@@ -700,6 +698,117 @@ def create_visualizations(df, only_product=False, all_dates=None, trend_window=7
                 ]
             }
         }
+        # 비교 상품 데이터 처리
+        compare_series = []
+        compare_legend = []
+        if compare_df is not None:
+            compare_df = compare_df.copy()
+            compare_df['판매일자'] = pd.to_datetime(compare_df['판매일자'])
+            compare_df['주차'] = compare_df['판매일자'].dt.isocalendar().week
+            # 올해
+            weekly_this_cmp = compare_df[compare_df['판매일자'].dt.year == current_year].groupby('주차')['실판매'].sum().reindex(week_range, fill_value=0)
+            sales_this_cmp = weekly_this_cmp.values.tolist()
+            valid_idx_this_cmp = [i for i, v in enumerate(sales_this_cmp) if v is not None and v != 0]
+            valid_sales_this_cmp = [sales_this_cmp[i] for i in valid_idx_this_cmp]
+            if valid_sales_this_cmp:
+                low_this_cmp = pad_trend_week(trend_calculator.lower_trend(valid_sales_this_cmp), valid_idx_this_cmp, len(sales_this_cmp))
+                high_this_cmp = pad_trend_week(trend_calculator.upper_trend(valid_sales_this_cmp), valid_idx_this_cmp, len(sales_this_cmp))
+                mid_this_cmp = pad_trend_week(trend_calculator.mid_trend(valid_sales_this_cmp), valid_idx_this_cmp, len(sales_this_cmp))
+            else:
+                low_this_cmp = high_this_cmp = mid_this_cmp = [None] * len(sales_this_cmp)
+            # 작년
+            weekly_last_cmp = compare_df[compare_df['판매일자'].dt.year == last_year].groupby('주차')['실판매'].sum().reindex(week_range, fill_value=0)
+            sales_last_cmp = weekly_last_cmp.values.tolist()
+            valid_idx_last_cmp = [i for i, v in enumerate(sales_last_cmp) if v is not None and v != 0]
+            valid_sales_last_cmp = [sales_last_cmp[i] for i in valid_idx_last_cmp]
+            if valid_sales_last_cmp:
+                low_last_cmp = pad_trend_week(trend_calculator.lower_trend(valid_sales_last_cmp), valid_idx_last_cmp, len(sales_last_cmp))
+                high_last_cmp = pad_trend_week(trend_calculator.upper_trend(valid_sales_last_cmp), valid_idx_last_cmp, len(sales_last_cmp))
+                mid_last_cmp = pad_trend_week(trend_calculator.mid_trend(valid_sales_last_cmp), valid_idx_last_cmp, len(sales_last_cmp))
+            else:
+                low_last_cmp = high_last_cmp = mid_last_cmp = [None] * len(sales_last_cmp)
+            # 시리즈/범례 추가 (순서 반드시 일치)
+            compare_series += [
+                {
+                    'name': f'비교-실판매({current_year})',
+                    'type': 'line',
+                    'data': sales_this_cmp,
+                    'symbol': 'circle',
+                    'symbolSize': 4,
+                    'lineStyle': {'width': 2, 'color': '#e573b7'},
+                    'connectNulls': True
+                },
+                {
+                    'name': f'비교-실판매({last_year})',
+                    'type': 'line',
+                    'data': sales_last_cmp,
+                    'symbol': 'circle',
+                    'symbolSize': 4,
+                    'lineStyle': {'width': 2, 'color': '#64b5f6'},
+                    'connectNulls': True
+                },
+                {
+                    'name': '비교-저점 추세(LOWESS, 전년도)',
+                    'type': 'line',
+                    'data': low_last_cmp,
+                    'lineStyle': {'color': '#aed581'},
+                    'symbol': 'none',
+                    'connectNulls': True
+                },
+                {
+                    'name': '비교-고점 추세(LOWESS, 전년도)',
+                    'type': 'line',
+                    'data': high_last_cmp,
+                    'lineStyle': {'color': '#ffb74d'},
+                    'symbol': 'none',
+                    'connectNulls': True
+                },
+                {
+                    'name': '비교-중위 추세(LOWESS, 전년도)',
+                    'type': 'line',
+                    'data': mid_last_cmp,
+                    'lineStyle': {'color': '#ff8a65'},
+                    'symbol': 'none',
+                    'connectNulls': True
+                },
+                {
+                    'name': '비교-저점 추세(LOWESS)',
+                    'type': 'line',
+                    'data': low_this_cmp,
+                    'lineStyle': {'type': 'dashed', 'color': '#ba68c8'},
+                    'symbol': 'none',
+                    'connectNulls': True
+                },
+                {
+                    'name': '비교-고점 추세(LOWESS)',
+                    'type': 'line',
+                    'data': high_this_cmp,
+                    'lineStyle': {'type': 'dashed', 'color': '#4fc3f7'},
+                    'symbol': 'none',
+                    'connectNulls': True
+                },
+                {
+                    'name': '비교-중위 추세(LOWESS)',
+                    'type': 'line',
+                    'data': mid_this_cmp,
+                    'lineStyle': {'type': 'dashed', 'color': '#00bcd4'},
+                    'symbol': 'none',
+                    'connectNulls': True
+                }
+            ]
+            compare_legend += [
+                f'비교-실판매({current_year})',
+                f'비교-실판매({last_year})',
+                '비교-저점 추세(LOWESS, 전년도)',
+                '비교-고점 추세(LOWESS, 전년도)',
+                '비교-중위 추세(LOWESS, 전년도)',
+                '비교-저점 추세(LOWESS)',
+                '비교-고점 추세(LOWESS)',
+                '비교-중위 추세(LOWESS)'
+            ]
+        # 기존 시리즈/범례와 합침 (순서 반드시 일치)
+        charts['weekly_sales_trend']['config']['series'].extend(compare_series)
+        charts['weekly_sales_trend']['config']['legend']['data'].extend(compare_legend)
 
     # charts['sales_trend'] 생성 후, 반환 직전 안전하게 변환
     charts['sales_trend']['data']['sales'] = safe_list(charts['sales_trend']['data']['sales'])
