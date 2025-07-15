@@ -106,6 +106,8 @@ def create_visualizations(df, only_product=False, all_dates=None, trend_window=7
         # 전체 판매 트렌드는 기존 방식 유지 (데이터가 있는 날짜만 x축)
         df = df.copy()
         df['판매일자'] = pd.to_datetime(df['판매일자'])
+        # 올해 데이터만 필터링
+        df = df[df['판매일자'].dt.year == current_year]
         daily_sales = df.groupby('판매일자')['실판매'].sum().reset_index()
         daily_sales = daily_sales[daily_sales['실판매'] != 0]
         dates = daily_sales['판매일자'].dt.strftime('%Y-%m-%d').tolist() if not daily_sales.empty else []
@@ -152,20 +154,21 @@ def create_visualizations(df, only_product=False, all_dates=None, trend_window=7
             ]
         }
     }
-    # 전년도 실판매 시계열 추가
-    full_date_range_last = pd.date_range(start=f'{last_year}-01-01', end=f'{last_year}-12-31', freq='D')
-    daily_sales_last = df[df['판매일자'].dt.year == last_year].groupby('판매일자')['실판매'].sum()
-    daily_sales_last = daily_sales_last.reindex(full_date_range_last)
-    sales_data_last = [float(v) if v is not None and not pd.isna(v) else None for v in daily_sales_last.values]
-    charts['sales_trend']['config']['series'].append({
-        'name': f'실판매({last_year})',
-        'type': 'line',
-        'data': safe_list(sales_data_last),
-        'symbol': 'circle',
-        'symbolSize': 4,
-        'lineStyle': {'width': 2, 'color': '#91cc75'},
-        'connectNulls': True
-    })
+    # 전년도 실판매 시계열 추가 (only_product=True일 때만)
+    if only_product:
+        full_date_range_last = pd.date_range(start=f'{last_year}-01-01', end=f'{last_year}-12-31', freq='D')
+        daily_sales_last = df[df['판매일자'].dt.year == last_year].groupby('판매일자')['실판매'].sum()
+        daily_sales_last = daily_sales_last.reindex(full_date_range_last)
+        sales_data_last = [float(v) if v is not None and not pd.isna(v) else None for v in daily_sales_last.values]
+        charts['sales_trend']['config']['series'].append({
+            'name': f'실판매({last_year})',
+            'type': 'line',
+            'data': safe_list(sales_data_last),
+            'symbol': 'circle',
+            'symbolSize': 4,
+            'lineStyle': {'width': 2, 'color': '#91cc75'},
+            'connectNulls': True
+        })
     if only_product:
         # 전년도 추세선 시리즈 추가
         charts['sales_trend']['config']['series'].extend([
@@ -615,8 +618,8 @@ def create_visualizations(df, only_product=False, all_dates=None, trend_window=7
                     'left': 'center',
                     'orient': 'horizontal',
                     'data': [
-                        f'실판매({last_year})',
                         f'실판매({current_year})',
+                        f'실판매({last_year})',
                         '저점 추세(LOWESS, 전년도)',
                         '고점 추세(LOWESS, 전년도)',
                         '중위 추세(LOWESS, 전년도)',
@@ -629,21 +632,21 @@ def create_visualizations(df, only_product=False, all_dates=None, trend_window=7
                 'yAxis': {'type': 'value', 'name': '판매량'},
                 'series': [
                     {
-                        'name': f'실판매({last_year})',
-                        'type': 'line',
-                        'data': sales_last,
-                        'symbol': 'circle',
-                        'symbolSize': 4,
-                        'lineStyle': {'width': 2, 'color': '#91cc75'},
-                        'connectNulls': True
-                    },
-                    {
                         'name': f'실판매({current_year})',
                         'type': 'line',
                         'data': sales_this,
                         'symbol': 'circle',
                         'symbolSize': 4,
                         'lineStyle': {'width': 2, 'color': '#5470c6'},
+                        'connectNulls': True
+                    },
+                    {
+                        'name': f'실판매({last_year})',
+                        'type': 'line',
+                        'data': sales_last,
+                        'symbol': 'circle',
+                        'symbolSize': 4,
+                        'lineStyle': {'width': 2, 'color': '#91cc75'},
                         'connectNulls': True
                     },
                     {
