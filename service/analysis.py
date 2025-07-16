@@ -10,6 +10,28 @@ def pareto_analysis(df):
     top_20_products = cumulative_percentage[cumulative_percentage <= 20].index.tolist()
     return top_20_products, product_sales, cumulative_percentage
 
+def color_pareto_analysis(df):
+    """컬러별 파레토 분석 - 상품-컬러 조합으로 파레토 분석"""
+    if df.empty or '칼라' not in df.columns:
+        return []
+    
+    # 상품-컬러 조합으로 판매량 집계
+    color_sales = df.groupby(['품명', '칼라'])['실판매'].sum().reset_index()
+    color_sales['상품_컬러'] = color_sales['품명'] + ' - ' + color_sales['칼라']
+    
+    # 전체 판매량 대비 비율 계산
+    total_sales = color_sales['실판매'].sum()
+    color_sales['비율'] = (color_sales['실판매'] / total_sales * 100).round(2)
+    
+    # 누적 비율 계산
+    color_sales = color_sales.sort_values('실판매', ascending=False)
+    color_sales['누적비율'] = color_sales['비율'].cumsum()
+    
+    # 80% 기준으로 파레토 상품-컬러 선택
+    pareto_color_products = color_sales[color_sales['누적비율'] <= 80]['상품_컬러'].tolist()
+    
+    return pareto_color_products
+
 def weekly_analysis(df):
     """주별 분석"""
     df['판매일자'] = pd.to_datetime(df['판매일자'])
@@ -151,7 +173,7 @@ def search_products(query, products):
     return [p for p in products if query.lower() in p.lower()]
 
 def get_pareto_products(df):
-    """파레토 상품 목록 반환"""
+    """파레토 상품 목록 반환 (상품별)"""
     if df.empty:
         return []
     
@@ -161,7 +183,23 @@ def get_pareto_products(df):
     
     # 80% 기준으로 파레토 상품 선택
     pareto_products = cumulative_percentage[cumulative_percentage <= 80].index.tolist()
-    return pareto_products 
+    return pareto_products
+
+def get_pareto_products_by_category(df):
+    """상품별/컬러별 파레토 상품 목록 반환"""
+    if df.empty:
+        return {'products': [], 'colors': []}
+    
+    # 상품별 파레토
+    product_pareto = get_pareto_products(df)
+    
+    # 컬러별 파레토
+    color_pareto = color_pareto_analysis(df)
+    
+    return {
+        'products': product_pareto,
+        'colors': color_pareto
+    }
 
 def get_product_stats(df, product_name):
     """

@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from service.db import load_from_db, save_to_db, delete_by_date, reset_db, init_clients_table, set_client_count, get_client_counts, init_weekly_clients_table, set_weekly_client_count, get_weekly_client_counts, get_current_week_client_count
-from service.analysis import generate_inventory_alerts, generate_a_grade_alerts, get_pareto_products, get_product_stats
+from service.analysis import generate_inventory_alerts, generate_a_grade_alerts, get_pareto_products, get_pareto_products_by_category, get_product_stats
 from service.visualization import create_visualizations
 from datetime import datetime
 import pandas as pd
@@ -20,6 +20,7 @@ def dashboard():
     init_weekly_clients_table()
 
     selected_product = request.args.get('product')
+    selected_color = request.args.get('color')  # 컬러 파라미터 추가
 
     # 거래처 수 저장 처리 (POST, 상품 세부 페이지)
     if request.method == 'POST' and selected_product and 'client_count_form' in request.form:
@@ -34,7 +35,7 @@ def dashboard():
             except ValueError:
                 pass
         flash('거래처 수가 저장되었습니다.', 'success')
-        return redirect(url_for('dashboard.dashboard', product=selected_product))
+        return redirect(url_for('dashboard.dashboard', product=selected_product, color=selected_color))
     
     # 주차별 거래처 수 저장 처리
     if request.method == 'POST' and selected_product and 'weekly_client_count_form' in request.form:
@@ -51,7 +52,7 @@ def dashboard():
                 flash(f'{year}년 {week}주차 거래처 수가 저장되었습니다.', 'success')
             except ValueError:
                 flash('올바른 숫자를 입력해주세요.', 'error')
-        return redirect(url_for('dashboard.dashboard', product=selected_product))
+        return redirect(url_for('dashboard.dashboard', product=selected_product, color=selected_color))
     
     compare_df = None
     if request.method == 'POST' and 'compare_upload' in request.form:
@@ -113,7 +114,16 @@ def dashboard():
     search_query = request.args.get('search', '')
     
     if selected_product and selected_product in product_list:
-        filtered_df = df[df['품명'] == selected_product]
+        # 컬러 필터링 적용
+        if selected_color:
+            # 특정 컬러가 선택된 경우: 해당 상품의 특정 컬러만 필터링
+            filtered_df = df[(df['품명'] == selected_product) & (df['칼라'] == selected_color)]
+            display_name = f"{selected_product} - {selected_color}"
+        else:
+            # 컬러가 선택되지 않은 경우: 해당 상품 전체
+            filtered_df = df[df['품명'] == selected_product]
+            display_name = selected_product
+        
         stats = {
             'total_items': len(filtered_df),
             'total_sales': filtered_df['실판매'].sum(),
@@ -178,7 +188,11 @@ def dashboard():
     if not df.empty:
         unique_dates = sorted(df['판매일자'].unique())
     
-    sidebar_products = get_pareto_products(df) if not df.empty else []
+    # 상품별/컬러별 파레토 상품 가져오기
+    pareto_data = get_pareto_products_by_category(df) if not df.empty else {'products': [], 'colors': []}
+    sidebar_products = pareto_data['products']
+    sidebar_colors = pareto_data['colors']
+    
     # 파레토 상품별 거래처 수 불러오기
     client_counts = get_client_counts()
     # 현재 상품의 거래처 수
@@ -191,10 +205,13 @@ def dashboard():
     
     return render_template('dashboard.html',
         charts=charts, plots=plots, stats=stats, product_list=product_list,
-        selected_product=selected_product, alert_df=alert_df, a_grade_alert_df=a_grade_alert_df, 
+        selected_product=selected_product, selected_color=selected_color, display_name=display_name if 'display_name' in locals() else selected_product,
+        alert_df=alert_df, a_grade_alert_df=a_grade_alert_df, 
         search_query=search_query, last_year=last_year, unique_dates=unique_dates,
         sidebar_products=sidebar_products,
+        sidebar_colors=sidebar_colors,
         sidebar_products_json=json.dumps(sidebar_products),
+        sidebar_colors_json=json.dumps(sidebar_colors),
         client_counts=client_counts,
         current_client_count=current_client_count,
         current_week_client_count=current_week_client_count,

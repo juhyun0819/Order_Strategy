@@ -81,15 +81,36 @@
           <i class="fas fa-trash text-gray-500"></i>
           <span>DB 초기화</span>
         </a>
-        {% if sidebar_products %}
+        {% if sidebar_products or sidebar_colors %}
         <div
           class="mt-6 overflow-y-auto"
           style="max-height: calc(100vh - 180px)"
         >
+          <!-- 파레토 탭 -->
           <div class="text-xs text-gray-400 font-semibold mb-2 pl-2">
-            파레토 상품
+            파레토 분석
           </div>
-          <ul class="space-y-1">
+          
+          <!-- 탭 버튼 -->
+          <div class="flex mb-2 px-2">
+            <button
+              id="product-tab"
+              class="flex-1 text-xs px-2 py-1 rounded-l-md transition-colors bg-blue-100 text-blue-700 font-medium"
+              onclick="switchTab('product')"
+            >
+              상품별
+            </button>
+            <button
+              id="color-tab"
+              class="flex-1 text-xs px-2 py-1 rounded-r-md transition-colors bg-gray-100 text-gray-600 hover:bg-gray-200"
+              onclick="switchTab('color')"
+            >
+              컬러별
+            </button>
+          </div>
+          
+          <!-- 상품별 파레토 리스트 -->
+          <ul id="product-list" class="space-y-1">
             {% for product in sidebar_products %}
             <li>
               <a
@@ -102,7 +123,57 @@
             </li>
             {% endfor %}
           </ul>
+          
+          <!-- 컬러별 파레토 리스트 -->
+          <ul id="color-list" class="space-y-1 hidden">
+            {% for color_product in sidebar_colors %}
+            <li>
+              <a
+                href="/dashboard?product={{ color_product.split(' - ')[0] if ' - ' in color_product else color_product }}&color={{ color_product.split(' - ')[1] if ' - ' in color_product else '' }}"
+                class="block px-3 py-2 rounded-lg transition-colors truncate {% if selected_product == (color_product.split(' - ')[0] if ' - ' in color_product else color_product) and selected_color == (color_product.split(' - ')[1] if ' - ' in color_product else '') %} bg-blue-100 text-blue-700 font-bold {% else %} text-gray-700 hover:bg-blue-50 hover:text-blue-700 {% endif %}"
+                title="{{ color_product }}"
+              >
+                <i class="fas fa-palette text-gray-400 mr-2"></i>{{ color_product }}
+              </a>
+            </li>
+            {% endfor %}
+          </ul>
         </div>
+        
+        <script>
+          function switchTab(tab) {
+            const productTab = document.getElementById('product-tab');
+            const colorTab = document.getElementById('color-tab');
+            const productList = document.getElementById('product-list');
+            const colorList = document.getElementById('color-list');
+            
+            if (tab === 'product') {
+              productTab.className = 'flex-1 text-xs px-2 py-1 rounded-l-md transition-colors bg-blue-100 text-blue-700 font-medium';
+              colorTab.className = 'flex-1 text-xs px-2 py-1 rounded-r-md transition-colors bg-gray-100 text-gray-600 hover:bg-gray-200';
+              productList.classList.remove('hidden');
+              colorList.classList.add('hidden');
+            } else {
+              productTab.className = 'flex-1 text-xs px-2 py-1 rounded-l-md transition-colors bg-gray-100 text-gray-600 hover:bg-gray-200';
+              colorTab.className = 'flex-1 text-xs px-2 py-1 rounded-r-md transition-colors bg-blue-100 text-blue-700 font-medium';
+              productList.classList.add('hidden');
+              colorList.classList.remove('hidden');
+            }
+          }
+          
+          // 페이지 로드 시 현재 선택에 따라 탭 설정
+          document.addEventListener('DOMContentLoaded', function() {
+            const selectedProduct = "{{ selected_product }}";
+            const selectedColor = "{{ selected_color }}";
+            
+            if (selectedColor) {
+              // 컬러가 선택된 경우 컬러별 탭 활성화
+              switchTab('color');
+            } else if (selectedProduct) {
+              // 상품만 선택된 경우 상품별 탭 활성화
+              switchTab('product');
+            }
+          });
+        </script>
         {% endif %}
       </nav>
     </div>
@@ -139,7 +210,7 @@
               </div>
               <div class="flex-1 flex items-center justify-between">
                 <h2 class="text-lg font-semibold text-gray-900 inline-block">
-                  {{ selected_product }}
+                  {{ display_name }}
                 </h2>
                 <!-- 주차별 거래처 수 입력란 -->
                 <form
@@ -868,7 +939,7 @@
               option_weekly_sales_trend.title = undefined;
               option_weekly_sales_trend.tooltip = {trigger: 'axis'};
 
-              var chartDomWeekly = document.getElementById('echart-weekly-sales-trend');
+              var chartDomWeekly = document.getElementById('echart-product-weekly-sales-trend');
               if (chartDomWeekly) {
                   var myChartWeekly = echarts.init(chartDomWeekly);
                   myChartWeekly.setOption(option_weekly_sales_trend);
@@ -1032,25 +1103,55 @@
       document.addEventListener("DOMContentLoaded", function () {
         // 현재 선택된 상품이 있는지 확인
         const currentProduct = "{{ selected_product }}";
+        const currentColor = "{{ selected_color }}";
         if (!currentProduct) {
           return; // 상품이 선택되지 않았으면 키보드 네비게이션 비활성화
         }
 
-        // 사이드바에서 상품 목록 가져오기
-        const productLinks = document.querySelectorAll(
-          'nav a[href*="product="]'
-        );
-        const products = Array.from(productLinks).map((link) => {
-          const url = new URL(link.href);
-          return url.searchParams.get("product");
-        });
-
-        if (products.length <= 1) {
-          return; // 상품이 1개 이하면 네비게이션 불필요
+        // 현재 활성 탭 확인
+        let currentTab = 'product';
+        const productTab = document.getElementById('product-tab');
+        const colorTab = document.getElementById('color-tab');
+        if (productTab && colorTab) {
+          if (productTab.classList.contains('bg-blue-100')) {
+            currentTab = 'product';
+          } else if (colorTab.classList.contains('bg-blue-100')) {
+            currentTab = 'color';
+          }
         }
 
-        // 현재 상품의 인덱스 찾기
-        const currentIndex = products.indexOf(currentProduct);
+        // 현재 탭에 따른 링크 목록 가져오기
+        let navigationLinks = [];
+        if (currentTab === 'product') {
+          // 상품별 탭: 상품 링크만 가져오기
+          const productLinks = document.querySelectorAll('#product-list a[href*="product="]');
+          navigationLinks = Array.from(productLinks).map((link) => {
+            const url = new URL(link.href);
+            return {
+              product: url.searchParams.get("product"),
+              color: url.searchParams.get("color") || ""
+            };
+          });
+        } else {
+          // 컬러별 탭: 컬러 링크만 가져오기
+          const colorLinks = document.querySelectorAll('#color-list a[href*="product="]');
+          navigationLinks = Array.from(colorLinks).map((link) => {
+            const url = new URL(link.href);
+            return {
+              product: url.searchParams.get("product"),
+              color: url.searchParams.get("color") || ""
+            };
+          });
+        }
+
+        if (navigationLinks.length <= 1) {
+          return; // 항목이 1개 이하면 네비게이션 불필요
+        }
+
+        // 현재 항목의 인덱스 찾기
+        const currentIndex = navigationLinks.findIndex(item => 
+          item.product === currentProduct && item.color === currentColor
+        );
         if (currentIndex === -1) {
           return;
         }
@@ -1069,22 +1170,24 @@
           let nextIndex = -1;
 
           if (e.key === "ArrowLeft") {
-            // 왼쪽 화살표: 이전 상품
+            // 왼쪽 화살표: 이전 항목
             nextIndex =
-              currentIndex > 0 ? currentIndex - 1 : products.length - 1;
+              currentIndex > 0 ? currentIndex - 1 : navigationLinks.length - 1;
             e.preventDefault();
           } else if (e.key === "ArrowRight") {
-            // 오른쪽 화살표: 다음 상품
+            // 오른쪽 화살표: 다음 항목
             nextIndex =
-              currentIndex < products.length - 1 ? currentIndex + 1 : 0;
+              currentIndex < navigationLinks.length - 1 ? currentIndex + 1 : 0;
             e.preventDefault();
           }
 
           if (nextIndex !== -1 && nextIndex !== currentIndex) {
-            const nextProduct = products[nextIndex];
-            window.location.href = `/dashboard?product=${encodeURIComponent(
-              nextProduct
-            )}`;
+            const nextItem = navigationLinks[nextIndex];
+            let url = `/dashboard?product=${encodeURIComponent(nextItem.product)}`;
+            if (nextItem.color) {
+              url += `&color=${encodeURIComponent(nextItem.color)}`;
+            }
+            window.location.href = url;
           }
         });
 
@@ -1094,7 +1197,7 @@
           const keyboardInfo = document.createElement("div");
           keyboardInfo.className = "text-xs text-gray-400 mt-1";
           keyboardInfo.innerHTML =
-            '<i class="fas fa-keyboard mr-1"></i>← → 키로 상품 이동';
+            `<i class="fas fa-keyboard mr-1"></i>← → 키로 ${currentTab === 'product' ? '상품' : '컬러'} 이동`;
           header
             .querySelector(".flex.items-center.space-x-4")
             .appendChild(keyboardInfo);
