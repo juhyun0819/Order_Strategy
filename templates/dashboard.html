@@ -158,20 +158,27 @@
               productList.classList.add('hidden');
               colorList.classList.remove('hidden');
             }
+            
+            // 탭 전환 후 키보드 네비게이션 재설정
+            setTimeout(() => {
+              setupKeyboardNavigation();
+            }, 100);
           }
           
-          // 페이지 로드 시 현재 선택에 따라 탭 설정
+          // 페이지 로드 시 현재 선택에 따라 탭 설정 (자동 전환 없이)
           document.addEventListener('DOMContentLoaded', function() {
             const selectedProduct = "{{ selected_product }}";
             const selectedColor = "{{ selected_color }}";
             
-            if (selectedColor) {
-              // 컬러가 선택된 경우 컬러별 탭 활성화
+            // URL에서 직접 컬러 파라미터가 있는 경우에만 컬러별 탭 활성화
+            const urlParams = new URLSearchParams(window.location.search);
+            const hasColorParam = urlParams.has('color');
+            
+            if (hasColorParam && selectedColor) {
+              // URL에 color 파라미터가 있고 컬러가 선택된 경우에만 컬러별 탭 활성화
               switchTab('color');
-            } else if (selectedProduct) {
-              // 상품만 선택된 경우 상품별 탭 활성화
-              switchTab('product');
             }
+            // 그 외의 경우는 현재 탭 상태 유지 (자동 전환 안함)
           });
         </script>
         {% endif %}
@@ -1100,7 +1107,7 @@
         }
       });
       // 키보드 네비게이션 기능
-      document.addEventListener("DOMContentLoaded", function () {
+      function setupKeyboardNavigation() {
         // 현재 선택된 상품이 있는지 확인
         const currentProduct = "{{ selected_product }}";
         const currentColor = "{{ selected_color }}";
@@ -1149,9 +1156,15 @@
         }
 
         // 현재 항목의 인덱스 찾기
-        const currentIndex = navigationLinks.findIndex(item => 
-          item.product === currentProduct && item.color === currentColor
-        );
+        const currentIndex = navigationLinks.findIndex(item => {
+          if (currentTab === 'product') {
+            // 상품별 탭에서는 상품명만 비교 (color는 빈 문자열)
+            return item.product === currentProduct && item.color === "";
+          } else {
+            // 컬러별 탭에서는 상품명과 컬러 모두 비교
+            return item.product === currentProduct && item.color === currentColor;
+          }
+        });
         if (currentIndex === -1) {
           return;
         }
@@ -1194,6 +1207,12 @@
         // 키보드 단축키 안내 표시
         const header = document.querySelector("header");
         if (header) {
+          // 기존 키보드 안내 제거
+          const existingInfo = header.querySelector('.text-xs.text-gray-400');
+          if (existingInfo) {
+            existingInfo.remove();
+          }
+          
           const keyboardInfo = document.createElement("div");
           keyboardInfo.className = "text-xs text-gray-400 mt-1";
           keyboardInfo.innerHTML =
@@ -1202,6 +1221,11 @@
             .querySelector(".flex.items-center.space-x-4")
             .appendChild(keyboardInfo);
         }
+      }
+
+      // 페이지 로드 시 키보드 네비게이션 설정
+      document.addEventListener("DOMContentLoaded", function () {
+        setupKeyboardNavigation();
       });
     </script>
   </body>
