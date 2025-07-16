@@ -10,6 +10,24 @@ def pareto_analysis(df):
     top_20_products = cumulative_percentage[cumulative_percentage <= 20].index.tolist()
     return top_20_products, product_sales, cumulative_percentage
 
+def pareto_analysis_current_year(df):
+    """올해(2025년) 데이터 기준 파레토 분석 - 상위 20% 상품 추출"""
+    if df.empty:
+        return [], pd.Series(), pd.Series()
+    
+    # 올해(2025년) 데이터만 필터링
+    df['판매일자'] = pd.to_datetime(df['판매일자'])
+    current_year_df = df[df['판매일자'].dt.year == 2025]
+    
+    if current_year_df.empty:
+        return [], pd.Series(), pd.Series()
+    
+    product_sales = current_year_df.groupby('품명')['실판매'].sum().sort_values(ascending=False)
+    total_sales = product_sales.sum()
+    cumulative_percentage = (product_sales.cumsum() / total_sales * 100)
+    top_20_products = cumulative_percentage[cumulative_percentage <= 20].index.tolist()
+    return top_20_products, product_sales, cumulative_percentage
+
 def color_pareto_analysis(df):
     """컬러별 파레토 분석 - 상품-컬러 조합으로 파레토 분석"""
     if df.empty or '칼라' not in df.columns:
@@ -17,6 +35,35 @@ def color_pareto_analysis(df):
     
     # 상품-컬러 조합으로 판매량 집계
     color_sales = df.groupby(['품명', '칼라'])['실판매'].sum().reset_index()
+    color_sales['상품_컬러'] = color_sales['품명'] + ' - ' + color_sales['칼라']
+    
+    # 전체 판매량 대비 비율 계산
+    total_sales = color_sales['실판매'].sum()
+    color_sales['비율'] = (color_sales['실판매'] / total_sales * 100).round(2)
+    
+    # 누적 비율 계산
+    color_sales = color_sales.sort_values('실판매', ascending=False)
+    color_sales['누적비율'] = color_sales['비율'].cumsum()
+    
+    # 80% 기준으로 파레토 상품-컬러 선택
+    pareto_color_products = color_sales[color_sales['누적비율'] <= 80]['상품_컬러'].tolist()
+    
+    return pareto_color_products
+
+def color_pareto_analysis_current_year(df):
+    """올해(2025년) 데이터 기준 컬러별 파레토 분석 - 상품-컬러 조합으로 파레토 분석"""
+    if df.empty or '칼라' not in df.columns:
+        return []
+    
+    # 올해(2025년) 데이터만 필터링
+    df['판매일자'] = pd.to_datetime(df['판매일자'])
+    current_year_df = df[df['판매일자'].dt.year == 2025]
+    
+    if current_year_df.empty:
+        return []
+    
+    # 상품-컬러 조합으로 판매량 집계
+    color_sales = current_year_df.groupby(['품명', '칼라'])['실판매'].sum().reset_index()
     color_sales['상품_컬러'] = color_sales['품명'] + ' - ' + color_sales['칼라']
     
     # 전체 판매량 대비 비율 계산
@@ -185,6 +232,26 @@ def get_pareto_products(df):
     pareto_products = cumulative_percentage[cumulative_percentage <= 80].index.tolist()
     return pareto_products
 
+def get_pareto_products_current_year(df):
+    """올해(2025년) 데이터 기준 파레토 상품 목록 반환 (상품별)"""
+    if df.empty:
+        return []
+    
+    # 올해(2025년) 데이터만 필터링
+    df['판매일자'] = pd.to_datetime(df['판매일자'])
+    current_year_df = df[df['판매일자'].dt.year == 2025]
+    
+    if current_year_df.empty:
+        return []
+    
+    product_sales = current_year_df.groupby('품명')['실판매'].sum().sort_values(ascending=False)
+    total_sales = product_sales.sum()
+    cumulative_percentage = (product_sales.cumsum() / total_sales * 100)
+    
+    # 80% 기준으로 파레토 상품 선택
+    pareto_products = cumulative_percentage[cumulative_percentage <= 80].index.tolist()
+    return pareto_products
+
 def get_pareto_products_by_category(df):
     """상품별/컬러별 파레토 상품 목록 반환"""
     if df.empty:
@@ -195,6 +262,22 @@ def get_pareto_products_by_category(df):
     
     # 컬러별 파레토
     color_pareto = color_pareto_analysis(df)
+    
+    return {
+        'products': product_pareto,
+        'colors': color_pareto
+    }
+
+def get_pareto_products_by_category_current_year(df):
+    """올해(2025년) 데이터 기준 상품별/컬러별 파레토 상품 목록 반환"""
+    if df.empty:
+        return {'products': [], 'colors': []}
+    
+    # 상품별 파레토 (올해 기준)
+    product_pareto = get_pareto_products_current_year(df)
+    
+    # 컬러별 파레토 (올해 기준)
+    color_pareto = color_pareto_analysis_current_year(df)
     
     return {
         'products': product_pareto,

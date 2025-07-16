@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from service.db import load_from_db, save_to_db, delete_by_date, reset_db, init_clients_table, set_client_count, get_client_counts, init_weekly_clients_table, set_weekly_client_count, get_weekly_client_counts, get_current_week_client_count
-from service.analysis import generate_inventory_alerts, generate_a_grade_alerts, get_pareto_products, get_pareto_products_by_category, get_product_stats
+from service.analysis import generate_inventory_alerts, generate_a_grade_alerts, get_pareto_products, get_pareto_products_by_category, get_pareto_products_by_category_current_year, get_product_stats
 from service.visualization import create_visualizations
 from service.charts import create_weekly_sales_chart
 from datetime import datetime
@@ -201,8 +201,8 @@ def dashboard():
     if not df.empty:
         unique_dates = sorted(df['판매일자'].unique())
     
-    # 상품별/컬러별 파레토 상품 가져오기
-    pareto_data = get_pareto_products_by_category(df) if not df.empty else {'products': [], 'colors': []}
+    # 상품별/컬러별 파레토 상품 가져오기 (올해 기준)
+    pareto_data = get_pareto_products_by_category_current_year(df) if not df.empty else {'products': [], 'colors': []}
     sidebar_products = pareto_data['products']
     sidebar_colors = pareto_data['colors']
     
