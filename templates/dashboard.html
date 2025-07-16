@@ -547,6 +547,54 @@
           </div>
         </div>
 
+        <!-- 추세선 알림 -->
+        {% if trend_alerts %}
+        <div class="mb-8">
+          <div class="bg-white rounded-xl shadow-sm border">
+            <div class="p-6 border-b">
+              <div class="flex items-center space-x-3">
+                <div
+                  class="h-10 w-10 rounded-lg bg-orange-100 flex items-center justify-center"
+                >
+                  <i class="fas fa-chart-line text-orange-600"></i>
+                </div>
+                <div>
+                  <h2 class="text-lg font-semibold text-gray-900">
+                    추세선 벗어남 알림
+                  </h2>
+                  <p class="text-sm text-gray-500">
+                    전년 추세선을 벗어나는 판매량을 확인하세요
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div class="p-6">
+              <div class="space-y-3 max-h-96 overflow-y-auto">
+                {% for alert in trend_alerts %}
+                <div class="flex items-center p-4 rounded-lg {% if alert.type == 'high' %}bg-red-50 border border-red-200{% else %}bg-orange-50 border border-orange-200{% endif %}">
+                  <div class="flex-shrink-0">
+                    <i class="fas fa-exclamation-triangle {% if alert.type == 'high' %}text-red-500{% else %}text-orange-500{% endif %} mr-3"></i>
+                  </div>
+                  <div class="flex-1">
+                    <p class="text-sm font-medium {% if alert.type == 'high' %}text-red-800{% else %}text-orange-800{% endif %}">
+                      {{ alert.message }}
+                    </p>
+                    <p class="text-xs text-gray-600 mt-1">
+                      {% if alert.type == 'high' %}
+                        <span class="text-red-600 font-medium">고점 추세 초과</span>
+                      {% else %}
+                        <span class="text-orange-600 font-medium">저점 추세 미달</span>
+                      {% endif %}
+                    </p>
+                  </div>
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+
         <!-- 알림/파레토/상품별 그래프/파레토 분석 등 전체 상품용 섹션 -->
         {% if alert_df is not none and not alert_df.empty %}
         <div class="mb-8">
@@ -1135,7 +1183,7 @@
           // 상품별 탭: 상품 링크만 가져오기
           const productLinks = document.querySelectorAll('#product-list a[href*="product="]');
           navigationLinks = Array.from(productLinks).map((link) => {
-            const url = new URL(link.href);
+          const url = new URL(link.href);
             return {
               product: url.searchParams.get("product"),
               color: url.searchParams.get("color") || ""

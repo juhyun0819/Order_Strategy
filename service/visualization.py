@@ -46,7 +46,7 @@ def create_visualizations(df, only_product=False, all_dates=None, trend_window=7
         pareto_analysis = create_pareto_analysis_chart(df)
         if pareto_analysis:
             charts['pareto_analysis'] = pareto_analysis
-    
+
     return charts
 
 def chart_to_echarts_option(chart_data):

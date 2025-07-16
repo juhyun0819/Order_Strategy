@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from service.db import load_from_db, save_to_db, delete_by_date, reset_db, init_clients_table, set_client_count, get_client_counts, init_weekly_clients_table, set_weekly_client_count, get_weekly_client_counts, get_current_week_client_count
 from service.analysis import generate_inventory_alerts, generate_a_grade_alerts, get_pareto_products, get_pareto_products_by_category, get_product_stats
 from service.visualization import create_visualizations
+from service.charts import create_weekly_sales_chart
 from datetime import datetime
 import pandas as pd
 import json
@@ -135,6 +136,11 @@ def dashboard():
         plots = create_visualizations(filtered_df, only_product=True, all_dates=all_dates, compare_df=compare_df, weekly_client_data=weekly_client_data)
         charts = create_visualizations(df)  # 전체 데이터용
         
+        # 추세선 알림 데이터 추출
+        trend_alerts = []
+        if plots and 'weekly_sales_trend' in plots and plots['weekly_sales_trend']:
+            trend_alerts = plots['weekly_sales_trend'].get('data', {}).get('trend_alerts', [])
+        
         alert_df = None
         a_grade_alert_df = None
     else:
@@ -160,6 +166,24 @@ def dashboard():
         }
         charts = create_visualizations(filtered_df)
         plots = None
+        
+        # 파레토 상품들에 대한 추세 알림 생성 (메인 대시보드용)
+        trend_alerts = []
+        if not filtered_df.empty:
+            # 파레토 상품들 가져오기
+            pareto_products = get_pareto_products(filtered_df)
+            
+            for product in pareto_products[:10]:  # 상위 10개 파레토 상품만 분석
+                product_df = filtered_df[filtered_df['품명'] == product]
+                if not product_df.empty:
+                    weekly_sales_product = create_weekly_sales_chart(product_df)
+                    if weekly_sales_product and 'data' in weekly_sales_product:
+                        product_alerts = weekly_sales_product.get('data', {}).get('trend_alerts', [])
+                        # 상품명을 알림 메시지에 추가
+                        for alert in product_alerts:
+                            alert['product'] = product
+                            alert['message'] = f"[{product}] {alert['message']}"
+                        trend_alerts.extend(product_alerts)
         
         alert_rows = generate_inventory_alerts(df)
         alert_df = pd.DataFrame(alert_rows) if alert_rows else None
@@ -195,7 +219,7 @@ def dashboard():
     return render_template('dashboard.html',
         charts=charts, plots=plots, stats=stats, product_list=product_list,
         selected_product=selected_product, selected_color=selected_color, display_name=display_name if 'display_name' in locals() else selected_product,
-        alert_df=alert_df, a_grade_alert_df=a_grade_alert_df, 
+        alert_df=alert_df, a_grade_alert_df=a_grade_alert_df, trend_alerts=trend_alerts if 'trend_alerts' in locals() else [],
         search_query=search_query, last_year=last_year, unique_dates=unique_dates,
         sidebar_products=sidebar_products,
         sidebar_colors=sidebar_colors,

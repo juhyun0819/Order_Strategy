@@ -43,6 +43,62 @@ def interpolate_trend(data_indices, trend_values, total_length):
     
     return result
 
+def interpolate_sales_data(data_list):
+    """실판매 데이터의 연속된 구간들 사이만 연결 (보간된 값은 None으로 유지)"""
+    if not data_list:
+        return data_list
+    
+    result = data_list.copy()
+    
+    # 실제 데이터가 있는 인덱스들 찾기
+    data_indices = [i for i, v in enumerate(result) if v is not None]
+    
+    # 연속된 구간들 사이를 연결하기 위해 보간된 값들을 임시로 계산
+    # 하지만 실제로는 None으로 유지
+    temp_result = result.copy()
+    
+    # None 값들을 선형 보간으로 채움 (연속된 구간 내에서만)
+    i = 0
+    while i < len(temp_result):
+        if temp_result[i] is not None:
+            i += 1
+            continue
+        
+        # 왼쪽 경계 찾기
+        left_idx = i - 1
+        left_value = None
+        while left_idx >= 0:
+            if temp_result[left_idx] is not None:
+                left_value = temp_result[left_idx]
+                break
+            left_idx -= 1
+        
+        # 오른쪽 경계 찾기
+        right_idx = i + 1
+        right_value = None
+        while right_idx < len(temp_result):
+            if temp_result[right_idx] is not None:
+                right_value = temp_result[right_idx]
+                break
+            right_idx += 1
+        
+        # 보간 수행 (양쪽에 값이 있는 경우에만)
+        if left_value is not None and right_value is not None:
+            # 양쪽에 값이 있는 경우 선형 보간
+            for j in range(left_idx + 1, right_idx):
+                if j < len(temp_result):
+                    ratio = (j - left_idx) / (right_idx - left_idx)
+                    temp_result[j] = left_value + (right_value - left_value) * ratio
+        
+        i += 1
+    
+    # 실제 데이터가 있는 인덱스는 원래 값 유지, 나머지는 None으로 설정
+    final_result = [None] * len(result)
+    for idx in data_indices:
+        final_result[idx] = result[idx]
+    
+    return final_result
+
 def calculate_calendar_week(date):
     """실제 달력 기준으로 주차를 계산합니다."""
     # ISO 주차 계산 사용
@@ -120,6 +176,54 @@ def create_sales_trend_chart(df, only_product=False, all_dates=None, trend_windo
         }
         trend_last_year = None
     
+        # 작년 추세선을 벗어나는 지점들을 markPoint로 표시
+    mark_points = []
+    if only_product and trend_last_year:
+        for i, sales_value in enumerate(sales_data):
+            if sales_value is not None and i < len(trend_last_year['high']) and i < len(trend_last_year['low']):
+                high_threshold = trend_last_year['high'][i]
+                low_threshold = trend_last_year['low'][i]
+                
+                if high_threshold is not None and low_threshold is not None:
+                    if sales_value > high_threshold:
+                        # 고점 추세보다 높은 경우 - 빨간색 markPoint
+                        mark_points.append({
+                            'name': f'{sales_value}',
+                            'value': sales_value,
+                            'xAxis': i,
+                            'yAxis': sales_value,
+                            'itemStyle': {'color': '#ff4444'},
+                            'symbol': 'circle',
+                            'symbolSize': 12,
+                            'label': {
+                                'show': True,
+                                'position': 'top',
+                                'formatter': f'{sales_value}',
+                                'fontSize': 12,
+                                'fontWeight': 'bold',
+                                'color': '#ff4444'
+                            }
+                        })
+                    elif sales_value < low_threshold:
+                        # 저점 추세보다 낮은 경우 - 주황색 markPoint
+                        mark_points.append({
+                            'name': f'{sales_value}',
+                            'value': sales_value,
+                            'xAxis': i,
+                            'yAxis': sales_value,
+                            'itemStyle': {'color': '#ff8800'},
+                            'symbol': 'circle',
+                            'symbolSize': 12,
+                            'label': {
+                                'show': True,
+                                'position': 'bottom',
+                                'formatter': f'{sales_value}',
+                                'fontSize': 12,
+                                'fontWeight': 'bold',
+                                'color': '#ff8800'
+                            }
+                        })
+    
     # 차트 설정
     series = [
         {
@@ -130,7 +234,10 @@ def create_sales_trend_chart(df, only_product=False, all_dates=None, trend_windo
             'symbolSize': 4,
             'lineStyle': {'width': 2, 'color': '#5470c6'},
             'itemStyle': {'color': '#5470c6'},
-            'connectNulls': True
+            'connectNulls': True,
+            'markPoint': {
+                'data': mark_points
+            }
         }
     ]
     
@@ -247,7 +354,24 @@ def create_sales_trend_chart(df, only_product=False, all_dates=None, trend_windo
             'legend': {'show': True},
             'xAxis': {'type': 'category', 'name': '월', 'data': dates},
             'yAxis': {'type': 'value', 'name': '판매량'},
-            'series': series
+            'series': series,
+            'dataZoom': [
+                {
+                    'type': 'inside',
+                    'xAxisIndex': 0,
+                    'start': 0,
+                    'end': 100
+                },
+                {
+                    'type': 'slider',
+                    'xAxisIndex': 0,
+                    'start': 0,
+                    'end': 100,
+                    'height': 20,
+                    'handleSize': '60%',
+                    'bottom': 0
+                }
+            ]
         }
     }
 
@@ -267,17 +391,33 @@ def create_weekly_sales_chart(df, weekly_client_data=None):
     df_current_year = df_copy[df_copy['판매일자'].dt.year == current_year]
     df_last_year = df_copy[df_copy['판매일자'].dt.year == last_year]
     
-    legend_data = []
     series_list = []
     
-    # 모든 주차 데이터 수집
-    all_weeks = set()
-    
-    # 추세선 변수 초기화
-    low_trend = high_trend = mid_trend = []
+    # 변수 초기화
+    last_year_values = []
+    last_high_trend = []
+    last_low_trend = []
+    last_mid_trend = []
     
     # 2025년 데이터가 있는지 확인
     has_current_year_data = not df_current_year.empty and df_current_year['실판매'].sum() > 0
+    
+    # 전년도 데이터 처리 (올해 데이터 처리 전에 먼저 처리)
+    weekly_sales_last = None
+    if not df_last_year.empty:
+        # 전년도 주차 계산 (올해와 동일한 방식)
+        df_last_year['주차'] = df_last_year['판매일자'].apply(calculate_calendar_week)
+        weekly_sales_last = df_last_year.groupby('주차')['실판매'].sum().reset_index()
+        weekly_sales_last = weekly_sales_last.sort_values('주차')
+        last_year_values = weekly_sales_last['실판매'].tolist()
+        
+        # 전년도 추세선 계산
+        if len(last_year_values) > 2:
+            last_low_trend = safe_list(trend_calculator.lower_trend(last_year_values))
+            last_high_trend = safe_list(trend_calculator.upper_trend(last_year_values))
+            last_mid_trend = safe_list(trend_calculator.mid_trend(last_year_values))
+        else:
+            last_low_trend = last_high_trend = last_mid_trend = last_year_values
     
     # 올해 데이터 처리
     if has_current_year_data:
@@ -285,9 +425,7 @@ def create_weekly_sales_chart(df, weekly_client_data=None):
         df_current_year['주차'] = df_current_year['판매일자'].apply(calculate_calendar_week)
         weekly_sales = df_current_year.groupby('주차')['실판매'].sum().reset_index()
         weekly_sales = weekly_sales.sort_values('주차')
-        current_weeks = [f"{week}주차" for week in weekly_sales['주차'].tolist()]
         current_values = weekly_sales['실판매'].tolist()
-        all_weeks.update(weekly_sales['주차'].tolist())
         
         # 올해 추세선 계산
         if len(current_values) > 2:
@@ -297,60 +435,80 @@ def create_weekly_sales_chart(df, weekly_client_data=None):
         else:
             low_trend = high_trend = mid_trend = current_values
         
-        legend_data.extend([
-            f'실판매({current_year})',
-            f'실판매({last_year})',
-            f'저점 추세({current_year})',
-            f'고점 추세({current_year})',
-            f'중위 추세({current_year})',
-            f'저점 추세({last_year})',
-            f'고점 추세({last_year})',
-            f'중위 추세({last_year})'
-        ])
+        # 작년 추세선을 벗어나는 지점들을 markPoint로 표시
+        mark_points = []
+        if len(last_year_values) > 2 and len(current_values) > 0:
+            for i, (week, current_value) in enumerate(zip(weekly_sales['주차'].tolist(), current_values)):
+                # 해당 주차의 전년도 추세선 값 찾기
+                if week in weekly_sales_last['주차'].values:
+                    last_year_idx = weekly_sales_last[weekly_sales_last['주차'] == week].index[0]
+                    if last_year_idx < len(last_high_trend) and last_year_idx < len(last_low_trend):
+                        high_threshold = last_high_trend[last_year_idx]
+                        low_threshold = last_low_trend[last_year_idx]
+                        
+                        if high_threshold is not None and low_threshold is not None:
+                            if current_value > high_threshold:
+                                # 고점 추세보다 높은 경우 - 빨간색 markPoint
+                                mark_points.append({
+                                    'name': f'{current_value}',
+                                    'value': current_value,
+                                    'xAxis': week - 1,  # 주차는 1부터 시작하므로 인덱스는 0부터
+                                    'yAxis': current_value,
+                                    'itemStyle': {'color': '#ff4444'},
+                                    'symbol': 'circle',
+                                    'symbolSize': 12,
+                                    'label': {
+                                        'show': True,
+                                        'position': 'top',
+                                        'formatter': f'{current_value}',
+                                        'fontSize': 12,
+                                        'fontWeight': 'bold',
+                                        'color': '#ff4444'
+                                    }
+                                })
+                            elif current_value < low_threshold:
+                                # 저점 추세보다 낮은 경우 - 주황색 markPoint
+                                mark_points.append({
+                                    'name': f'{current_value}',
+                                    'value': current_value,
+                                    'xAxis': week - 1,  # 주차는 1부터 시작하므로 인덱스는 0부터
+                                    'yAxis': current_value,
+                                    'itemStyle': {'color': '#ff8800'},
+                                    'symbol': 'circle',
+                                    'symbolSize': 12,
+                                    'label': {
+                                        'show': True,
+                                        'position': 'bottom',
+                                        'formatter': f'{current_value}',
+                                        'fontSize': 12,
+                                        'fontWeight': 'bold',
+                                        'color': '#ff8800'
+                                    }
+                                })
         
-        series_list.extend([
-            {
-                'name': f'실판매({current_year})',
-                'type': 'line',
-                'data': current_values,
-                'symbol': 'circle',
-                'symbolSize': 4,
-                'lineStyle': {'width': 2, 'color': '#5470c6'},
-                'itemStyle': {'color': '#5470c6'},
-                'connectNulls': False
+        # 올해 실판매 시리즈 추가 (먼저 추가)
+        series_list.append({
+            'name': f'실판매({current_year})',
+            'type': 'line',
+            'data': current_values,
+            'symbol': 'circle',
+            'symbolSize': 4,
+            'lineStyle': {'width': 2, 'color': '#5470c6'},
+            'itemStyle': {'color': '#5470c6'},
+            'connectNulls': True,
+            'markPoint': {
+                'data': mark_points
+            },
+            'tooltip': {
+                'formatter': 'function(params) { if (params.value !== null && params.value !== undefined) { return params.marker + params.seriesName + ": " + params.value; } return ""; }'
             }
-        ])
-        last_week = weekly_sales[weekly_sales['실판매'] > 0]['주차'].max() if (weekly_sales['실판매'] > 0).any() else 1
-    else:
-        current_weeks = []
-        current_values = []
-        last_week = 1
+        })
     
-    # 전년도 데이터 처리
+
+    
+    # 전년도 데이터 시리즈 추가 (올해 데이터 다음에)
     if not df_last_year.empty:
-        # 2025년 데이터가 있으면 2025년 기준으로, 없으면 2024년 기준으로 주차 계산
-        if has_current_year_data:
-            # 2025년 데이터가 있는 경우: 2025년 기준으로 주차 계산
-            df_last_year['주차'] = df_last_year['판매일자'].apply(calculate_calendar_week)
-        else:
-            # 2025년 데이터가 없는 경우: 2024년 기준으로 주차 계산
-            df_last_year['주차'] = df_last_year['판매일자'].apply(lambda x: x.isocalendar()[1])
-        
-        weekly_sales_last = df_last_year.groupby('주차')['실판매'].sum().reset_index()
-        weekly_sales_last = weekly_sales_last.sort_values('주차')
-        last_year_weeks = [f"{week}주차" for week in weekly_sales_last['주차'].tolist()]
-        last_year_values = weekly_sales_last['실판매'].tolist()
-        all_weeks.update(weekly_sales_last['주차'].tolist())
-        
-        # 전년도 추세선 계산
-        if len(last_year_values) > 2:
-            last_low_trend = safe_list(trend_calculator.lower_trend(last_year_values))
-            last_high_trend = safe_list(trend_calculator.upper_trend(last_year_values))
-            last_mid_trend = safe_list(trend_calculator.mid_trend(last_year_values))
-        else:
-            last_low_trend = last_high_trend = last_mid_trend = last_year_values
-        
-        # 전년도 실판매를 두 번째 위치에 추가
+        # 전년도 실판매 시리즈 추가
         series_list.append({
             'name': f'실판매({last_year})',
             'type': 'line',
@@ -359,41 +517,13 @@ def create_weekly_sales_chart(df, weekly_client_data=None):
             'symbolSize': 4,
             'lineStyle': {'width': 2, 'color': '#91cc75'},
             'itemStyle': {'color': '#91cc75'},
-            'connectNulls': False
+            'connectNulls': True,
+            'tooltip': {
+                'formatter': 'function(params) { if (params.value !== null && params.value !== undefined) { if (params.value === 0 || params.value === "") { return params.marker + params.seriesName + ": -"; } else { return params.marker + params.seriesName + ": " + params.value; } } return ""; }'
+            }
         })
         
-        # 올해 추세선을 전년도 실판매 뒤에 추가
-        series_list.extend([
-            {
-                'name': f'저점 추세({current_year})',
-                'type': 'line',
-                'data': low_trend,
-                'lineStyle': {'type': 'dashed', 'color': '#3ba272'},
-                'itemStyle': {'color': '#3ba272'},
-                'symbol': 'none',
-                'connectNulls': True
-            },
-            {
-                'name': f'고점 추세({current_year})',
-                'type': 'line',
-                'data': high_trend,
-                'lineStyle': {'type': 'dashed', 'color': '#fc8452'},
-                'itemStyle': {'color': '#fc8452'},
-                'symbol': 'none',
-                'connectNulls': True
-            },
-            {
-                'name': f'중위 추세({current_year})',
-                'type': 'line',
-                'data': mid_trend,
-                'lineStyle': {'type': 'dashed', 'color': '#9a60b4'},
-                'itemStyle': {'color': '#9a60b4'},
-                'symbol': 'none',
-                'connectNulls': True
-            }
-        ])
-        
-        # 전년도 추세선을 마지막에 추가
+        # 전년도 추세선 추가
         series_list.extend([
             {
                 'name': f'저점 추세({last_year})',
@@ -424,114 +554,134 @@ def create_weekly_sales_chart(df, weekly_client_data=None):
             }
         ])
     
+    # 올해 추세선 추가 (전년도 추세선 뒤에)
+    if has_current_year_data:
+        series_list.extend([
+            {
+                'name': f'저점 추세({current_year})',
+                'type': 'line',
+                'data': low_trend,
+                'lineStyle': {'type': 'dashed', 'color': '#3ba272'},
+                'itemStyle': {'color': '#3ba272'},
+                'symbol': 'none',
+                'connectNulls': True
+            },
+            {
+                'name': f'고점 추세({current_year})',
+                'type': 'line',
+                'data': high_trend,
+                'lineStyle': {'type': 'dashed', 'color': '#fc8452'},
+                'itemStyle': {'color': '#fc8452'},
+                'symbol': 'none',
+                'connectNulls': True
+            },
+            {
+                'name': f'중위 추세({current_year})',
+                'type': 'line',
+                'data': mid_trend,
+                'lineStyle': {'type': 'dashed', 'color': '#9a60b4'},
+                'itemStyle': {'color': '#9a60b4'},
+                'symbol': 'none',
+                'connectNulls': True
+            }
+        ])
+    
+    # X축 데이터 생성 (1-53주차로 고정)
+    x_axis_data = list(range(1, 54))
+    x_axis_labels = [str(week) for week in x_axis_data]
+    
+    # 데이터를 1-53주차에 매핑
+    week_to_index = {week: idx for idx, week in enumerate(x_axis_data)}
+    
+    # 데이터 매핑 - 시리즈 순서에 따라 동적으로 처리
+    if has_current_year_data:
+        # 올해 데이터 매핑 - 실제 주차에 맞게 표시하고 연속성 보장
+        current_mapped = [None] * 53
+        current_weeks = weekly_sales['주차'].tolist()
+        
+        for week, value in zip(current_weeks, current_values):
+            if week in week_to_index:
+                current_mapped[week_to_index[week]] = value
+        
+        # 데이터가 있는 주차들 사이만 연결 (데이터가 없는 구간은 None으로 유지)
+        current_mapped = interpolate_sales_data(current_mapped)
+        
+        if len(series_list) > 0:
+            series_list[0]['data'] = current_mapped
+        
+        # 올해 추세선 매핑 - 전체 주차에 걸쳐 표시
+        if len(current_values) > 2:
+            # 추세선을 전체 주차에 연속적으로 보간
+            current_weeks = weekly_sales['주차'].tolist()
+            current_data_indices = [week_to_index[week] for week in current_weeks if week in week_to_index]
+            
+            low_trend_mapped = interpolate_trend(current_data_indices, low_trend, 53)
+            high_trend_mapped = interpolate_trend(current_data_indices, high_trend, 53)
+            mid_trend_mapped = interpolate_trend(current_data_indices, mid_trend, 53)
+            
+            # 올해 추세선 위치 찾기 (시리즈 이름으로)
+            for i, series in enumerate(series_list):
+                if series['name'] == f'저점 추세({current_year})':
+                    series_list[i]['data'] = low_trend_mapped
+                elif series['name'] == f'고점 추세({current_year})':
+                    series_list[i]['data'] = high_trend_mapped
+                elif series['name'] == f'중위 추세({current_year})':
+                    series_list[i]['data'] = mid_trend_mapped
+    
+    # 전년도 데이터 매핑 - 실제 주차에 맞게 표시
+    if weekly_sales_last is not None:
+        # 1-53주차 배열에 실제 데이터만 매핑하고 연속성 보장
+        last_year_mapped = [None] * 53
+        last_year_weeks = weekly_sales_last['주차'].tolist()
+        
+        for week, value in zip(last_year_weeks, last_year_values):
+            if week in week_to_index:
+                last_year_mapped[week_to_index[week]] = value
+        
+        # 데이터가 있는 주차들 사이만 연결 (데이터가 없는 구간은 None으로 유지)
+        last_year_mapped = interpolate_sales_data(last_year_mapped)
+        
+        # 전년도 실판매 위치 찾기
+        for i, series in enumerate(series_list):
+            if series['name'] == f'실판매({last_year})':
+                series_list[i]['data'] = last_year_mapped
+                break
+        
+        # 전년도 추세선 매핑 - 전체 1-53주차에 걸쳐 표시
+        if len(last_year_values) > 2:
+            # 추세선을 전체 주차에 연속적으로 보간
+            last_data_weeks = weekly_sales_last['주차'].tolist()
+            last_data_indices = [week_to_index[week] for week in last_data_weeks if week in week_to_index]
+            
+            last_low_trend_mapped = interpolate_trend(last_data_indices, last_low_trend, 53)
+            last_high_trend_mapped = interpolate_trend(last_data_indices, last_high_trend, 53)
+            last_mid_trend_mapped = interpolate_trend(last_data_indices, last_mid_trend, 53)
+            
+            # 전년도 추세선 위치 찾기 (시리즈 이름으로)
+            for i, series in enumerate(series_list):
+                if series['name'] == f'저점 추세({last_year})':
+                    series_list[i]['data'] = last_low_trend_mapped
+                elif series['name'] == f'고점 추세({last_year})':
+                    series_list[i]['data'] = last_high_trend_mapped
+                elif series['name'] == f'중위 추세({last_year})':
+                    series_list[i]['data'] = last_mid_trend_mapped
+    
     # 주차별 거래처 수 데이터 추가
     if weekly_client_data:
-        legend_data.append('거래처 수')
-        series_list.append({
-            'name': '거래처 수',
-            'type': 'bar',
-            'yAxisIndex': 1,  # 두 번째 y축 사용
-            'data': weekly_client_data,
-            'itemStyle': {'color': '#ff6b6b'},
-            'barWidth': '60%'
-        })
-    
-    # 항상 1-53주차로 고정
-    x_axis_data = [str(week) for week in range(1, 54)]
-    week_to_index = {week: idx for idx, week in enumerate(range(1, 54))}
-    
-    # 올해 데이터를 전체 주차에 매핑
-    if has_current_year_data:
-        # 실제 판매량은 데이터가 있는 주차만 표시 (None으로 설정)
-        current_mapped_values = [None] * len(x_axis_data)
-        for week, value in zip(weekly_sales['주차'].tolist(), current_values):
-            if week in week_to_index:
-                current_mapped_values[week_to_index[week]] = value
-        
-        # 올해 추세선 계산 및 매핑
-        if len(current_values) > 2:
-            low_trend = safe_list(trend_calculator.lower_trend(current_values))
-            high_trend = safe_list(trend_calculator.upper_trend(current_values))
-            mid_trend = safe_list(trend_calculator.mid_trend(current_values))
-        else:
-            low_trend = high_trend = mid_trend = current_values
-        
-        # 추세선을 전체 주차에 연속적으로 매핑
-        # 데이터가 있는 주차의 인덱스를 찾아서 추세선을 보간
-        data_weeks = weekly_sales['주차'].tolist()
-        data_indices = [week_to_index[week] for week in data_weeks if week in week_to_index]
-        
-        # 추세선을 전체 주차에 보간
-        low_trend_mapped = interpolate_trend(data_indices, low_trend, len(x_axis_data))
-        high_trend_mapped = interpolate_trend(data_indices, high_trend, len(x_axis_data))
-        mid_trend_mapped = interpolate_trend(data_indices, mid_trend, len(x_axis_data))
-        
-        # 시리즈 업데이트
-        series_list[0]['data'] = current_mapped_values  # 실판매(2025)
-        series_list[2]['data'] = low_trend_mapped      # 저점 추세
-        series_list[3]['data'] = high_trend_mapped     # 고점 추세
-        series_list[4]['data'] = mid_trend_mapped      # 중위 추세
-    
-    # 전년도 데이터를 전체 주차에 매핑
-    last_year_mapped_values = [None] * len(x_axis_data)  # 기본값으로 None 배열 초기화
-    
-    if not df_last_year.empty:
-        # 실제 판매량은 데이터가 있는 주차만 표시 (None으로 설정)
-        last_year_mapped_values = [None] * len(x_axis_data)
-        for week, value in zip(weekly_sales_last['주차'].tolist(), last_year_values):
-            if week in week_to_index:
-                last_year_mapped_values[week_to_index[week]] = value
-        
-        # 전년도 추세선 계산 및 매핑
-        if len(last_year_values) > 2:
-            last_low_trend = safe_list(trend_calculator.lower_trend(last_year_values))
-            last_high_trend = safe_list(trend_calculator.upper_trend(last_year_values))
-            last_mid_trend = safe_list(trend_calculator.mid_trend(last_year_values))
-        else:
-            last_low_trend = last_high_trend = last_mid_trend = last_year_values
-        
-        # 전년도 추세선을 전체 주차에 연속적으로 매핑
-        last_data_weeks = weekly_sales_last['주차'].tolist()
-        last_data_indices = [week_to_index[week] for week in last_data_weeks if week in week_to_index]
-        
-        # 전년도 추세선을 전체 주차에 보간
-        last_low_trend_mapped = interpolate_trend(last_data_indices, last_low_trend, len(x_axis_data))
-        last_high_trend_mapped = interpolate_trend(last_data_indices, last_high_trend, len(x_axis_data))
-        last_mid_trend_mapped = interpolate_trend(last_data_indices, last_mid_trend, len(x_axis_data))
-        
-        # 전년도 시리즈 업데이트 (전년도 데이터가 있을 때만)
-        if len(series_list) >= 8:  # 전년도 시리즈가 추가되었을 때만
-            series_list[1]['data'] = last_year_mapped_values  # 실판매(2024)
-            series_list[5]['data'] = last_low_trend_mapped    # 저점 추세(2024)
-            series_list[6]['data'] = last_high_trend_mapped   # 고점 추세(2024)
-            series_list[7]['data'] = last_mid_trend_mapped    # 중위 추세(2024)
-        elif not has_current_year_data:
-            # 2025년 데이터가 없고 2024년 데이터만 있는 경우: 시리즈를 직접 업데이트
-            if len(series_list) >= 4:
-                series_list[0]['data'] = last_year_mapped_values  # 실판매
-                series_list[1]['data'] = last_low_trend_mapped    # 저점 추세
-                series_list[2]['data'] = last_high_trend_mapped   # 고점 추세
-                series_list[3]['data'] = last_mid_trend_mapped    # 중위 추세
-                
-                # 시리즈 이름도 2024년으로 수정
-                series_list[0]['name'] = f'실판매({last_year})'
-                series_list[1]['name'] = f'저점 추세({last_year})'
-                series_list[2]['name'] = f'고점 추세({last_year})'
-                series_list[3]['name'] = f'중위 추세({last_year})'
-    
-    # 전년도 데이터가 없어도 series_list[1]에 None 배열 할당
-    if len(series_list) >= 2 and not df_last_year.empty:
-        series_list[1]['data'] = last_year_mapped_values  # 실판매(2024) - None 배열
-    
-    # 주차별 거래처 수 데이터 매핑
-    if weekly_client_data:
-        client_data_mapped = [None] * len(x_axis_data)
+        # 거래처 수 데이터를 1-53주차에 매핑
+        client_data_mapped = [None] * 53
         for week, count in weekly_client_data.items():
             if week in week_to_index:
                 client_data_mapped[week_to_index[week]] = count
         
-        # 거래처 수 시리즈 업데이트 (마지막 시리즈)
-        series_list[-1]['data'] = client_data_mapped
+        series_list.append({
+            'name': '거래처 수',
+            'type': 'bar',
+            'yAxisIndex': 1,  # 두 번째 y축 사용
+            'data': client_data_mapped,
+            'itemStyle': {'color': '#ff6b6b'},
+            'barWidth': '60%'
+        })
     
     # y축 설정 (거래처 수가 있으면 이중 y축 사용)
     y_axis_config = [
@@ -547,12 +697,40 @@ def create_weekly_sales_chart(df, weekly_client_data=None):
             'axisLabel': {'color': '#ff6b6b'}
         })
     
+    # 추세선을 벗어나는 지점들을 알림용으로 수집
+    trend_alerts = []
+    if has_current_year_data and len(last_year_values) > 2 and len(current_values) > 0:
+        for i, current_value in enumerate(current_values):
+            if i < len(last_high_trend) and i < len(last_low_trend):
+                high_threshold = last_high_trend[i]
+                low_threshold = last_low_trend[i]
+                
+                if high_threshold is not None and low_threshold is not None:
+                    week_num = weekly_sales.iloc[i]['주차'] if i < len(weekly_sales) else i + 1
+                    if current_value > high_threshold:
+                        trend_alerts.append({
+                            'type': 'high',
+                            'week': week_num,
+                            'value': current_value,
+                            'threshold': high_threshold,
+                            'message': f'{week_num}주차 판매량({current_value})이 전년 고점 추세({high_threshold:.0f})를 초과'
+                        })
+                    elif current_value < low_threshold:
+                        trend_alerts.append({
+                            'type': 'low',
+                            'week': week_num,
+                            'value': current_value,
+                            'threshold': low_threshold,
+                            'message': f'{week_num}주차 판매량({current_value})이 전년 저점 추세({low_threshold:.0f}) 미달'
+                        })
+    
     return {
         'type': 'line',
         'title': '주별 판매량',
         'data': {
-            'weeks': current_weeks,
-            'values': current_values
+            'weeks': x_axis_labels,
+            'values': current_values if has_current_year_data else [],
+            'trend_alerts': trend_alerts
         },
         'config': {
             'tooltip': {
@@ -560,17 +738,37 @@ def create_weekly_sales_chart(df, weekly_client_data=None):
                 'axisPointer': {
                     'show': False
                 },
-                'formatter': 'function(params) { var result = params[0].axisValue + "주차<br/>"; params.forEach(function(param) { if (param.value !== null && param.value !== undefined) { result += param.marker + param.seriesName + ": " + param.value + "<br/>"; } }); return result; }'
+                'formatter': 'function(params) { var result = params[0].axisValue + "<br/>"; params.forEach(function(param) { if (param.value !== null && param.value !== undefined) { result += param.marker + param.seriesName + ": " + param.value + "<br/>"; } }); return result; }'
             },
             'xAxis': {
                 'type': 'category',
                 'name': '주차',
-                'data': x_axis_data,
+                'data': x_axis_labels,
                 'axisLabel': {'rotate': 30, 'interval': 0}
             },
             'yAxis': y_axis_config,
             'series': series_list,
-            'legend': {'data': legend_data}
+            'legend': {
+                'show': True,
+                'data': [series['name'] for series in series_list]
+            },
+            'dataZoom': [
+                {
+                    'type': 'inside',
+                    'xAxisIndex': 0,
+                    'start': 0,
+                    'end': 100
+                },
+                {
+                    'type': 'slider',
+                    'xAxisIndex': 0,
+                    'start': 0,
+                    'end': 100,
+                    'height': 20,
+                    'handleSize': '60%',
+                    'bottom': 0
+                }
+            ]
         }
     }
 
@@ -601,7 +799,7 @@ def create_product_sales_chart(df):
                 'type': 'bar',
                 'data': product_sales.values.tolist() if not product_sales.empty else [],
                 'itemStyle': {'color': '#73c0de'}
-            }]
+            }],
         }
     }
 
