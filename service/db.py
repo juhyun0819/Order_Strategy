@@ -68,7 +68,7 @@ def delete_by_date(date):
     deleted_count = cursor.rowcount
     conn.commit()
     conn.close()
-    return deleted_count
+    return deleted_count 
 
 def init_clients_table():
     conn = sqlite3.connect('db.sqlite3')
@@ -76,30 +76,16 @@ def init_clients_table():
     c.execute('''
         CREATE TABLE IF NOT EXISTS pareto_clients (
             product TEXT PRIMARY KEY,
-            client_count INTEGER,
-            updated_at TEXT
-        )
-    ''')
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS pareto_clients_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            product TEXT,
-            client_count INTEGER,
-            updated_at TEXT
+            client_count INTEGER
         )
     ''')
     conn.commit()
     conn.close()
 
 def set_client_count(product, count):
-    from datetime import datetime
     conn = sqlite3.connect('db.sqlite3')
     c = conn.cursor()
-    today = datetime.now().strftime('%Y-%m-%d')
-    # 최신값은 pareto_clients에 upsert
-    c.execute('REPLACE INTO pareto_clients (product, client_count, updated_at) VALUES (?, ?, ?)', (product, count, today))
-    # 이력은 append
-    c.execute('INSERT INTO pareto_clients_history (product, client_count, updated_at) VALUES (?, ?, ?)', (product, count, today))
+    c.execute('REPLACE INTO pareto_clients (product, client_count) VALUES (?, ?)', (product, count))
     conn.commit()
     conn.close()
 
@@ -111,18 +97,63 @@ def get_client_counts():
     conn.close()
     return data
 
-def get_client_update_dates():
+# 주차별 거래처 수 관련 함수들
+def init_weekly_clients_table():
+    """주차별 거래처 수 테이블 초기화"""
     conn = sqlite3.connect('db.sqlite3')
     c = conn.cursor()
-    c.execute('SELECT product, updated_at FROM pareto_clients')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS weekly_clients (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            product TEXT,
+            year INTEGER,
+            week INTEGER,
+            client_count INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(product, year, week)
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+def set_weekly_client_count(product, year, week, count):
+    """주차별 거래처 수 저장/업데이트"""
+    conn = sqlite3.connect('db.sqlite3')
+    c = conn.cursor()
+    c.execute('''
+        INSERT OR REPLACE INTO weekly_clients (product, year, week, client_count, created_at) 
+        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+    ''', (product, year, week, count))
+    conn.commit()
+    conn.close()
+
+def get_weekly_client_counts(product, year):
+    """특정 상품의 연도별 주차 거래처 수 조회"""
+    conn = sqlite3.connect('db.sqlite3')
+    c = conn.cursor()
+    c.execute('''
+        SELECT week, client_count FROM weekly_clients 
+        WHERE product = ? AND year = ? 
+        ORDER BY week
+    ''', (product, year))
     data = dict(c.fetchall())
     conn.close()
     return data
 
-def get_client_history(product):
+def get_current_week_client_count(product):
+    """현재 주차의 거래처 수 조회"""
+    from datetime import datetime
+    current_date = datetime.now()
+    year = current_date.year
+    week = current_date.isocalendar()[1]
+    
     conn = sqlite3.connect('db.sqlite3')
     c = conn.cursor()
-    c.execute('SELECT updated_at, client_count FROM pareto_clients_history WHERE product = ? ORDER BY updated_at', (product,))
-    data = c.fetchall()
+    c.execute('''
+        SELECT client_count FROM weekly_clients 
+        WHERE product = ? AND year = ? AND week = ?
+    ''', (product, year, week))
+    result = c.fetchone()
     conn.close()
-    return data 
+    
+    return result[0] if result else None 

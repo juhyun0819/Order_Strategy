@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
-from service.db import load_from_db, save_to_db, delete_by_date, reset_db, init_clients_table, set_client_count, get_client_counts, get_client_update_dates
+from service.db import load_from_db, save_to_db, delete_by_date, reset_db, init_clients_table, set_client_count, get_client_counts, init_weekly_clients_table, set_weekly_client_count, get_weekly_client_counts, get_current_week_client_count
 from service.analysis import generate_inventory_alerts, generate_a_grade_alerts, get_pareto_products, get_product_stats
-from service.visualization import create_visualizations, create_client_sales_chart
+from service.visualization import create_visualizations
 from datetime import datetime
 import pandas as pd
 import json
@@ -16,16 +16,10 @@ def root():
 def dashboard():
     # 파레토 거래처 테이블 초기화 (최초 1회)
     init_clients_table()
+    # 주차별 거래처 수 테이블 초기화 (최초 1회)
+    init_weekly_clients_table()
 
-    # 대시보드 렌더링 (GET)
-    df = load_from_db()
-    # '일반상품' 제외
-    if not df.empty:
-        df = df[df['품명'] != '(일반상품)']
-    product_list = sorted(df['품명'].unique()) if not df.empty else []
-    all_dates = sorted(pd.to_datetime(df['판매일자']).unique()) if not df.empty else []
     selected_product = request.args.get('product')
-    search_query = request.args.get('search', '')
 
     # 거래처 수 저장 처리 (POST, 상품 세부 페이지)
     if request.method == 'POST' and selected_product and 'client_count_form' in request.form:
@@ -42,8 +36,46 @@ def dashboard():
         flash('거래처 수가 저장되었습니다.', 'success')
         return redirect(url_for('dashboard.dashboard', product=selected_product))
     
-    # 파일 업로드 처리 (POST)
-    if request.method == 'POST':
+    # 주차별 거래처 수 저장 처리
+    if request.method == 'POST' and selected_product and 'weekly_client_count_form' in request.form:
+        value = request.form.get('weekly_client_count', '').strip()
+        if value == '':
+            flash('거래처 수를 입력해주세요.', 'error')
+        else:
+            try:
+                count = int(value)
+                current_date = datetime.now()
+                year = current_date.year
+                week = current_date.isocalendar()[1]
+                set_weekly_client_count(selected_product, year, week, count)
+                flash(f'{year}년 {week}주차 거래처 수가 저장되었습니다.', 'success')
+            except ValueError:
+                flash('올바른 숫자를 입력해주세요.', 'error')
+        return redirect(url_for('dashboard.dashboard', product=selected_product))
+    
+    compare_df = None
+    if request.method == 'POST' and 'compare_upload' in request.form:
+        compare_file = request.files.get('compare_file')
+        if compare_file and compare_file.filename.endswith(('xls', 'xlsx')):
+            try:
+                compare_df = pd.read_excel(compare_file)
+                # 컬럼명 표준화 및 변환
+                compare_df.columns = [col.strip() for col in compare_df.columns]
+                rename_map = {}
+                if '거래일자' in compare_df.columns:
+                    rename_map['거래일자'] = '판매일자'
+                if '판매량' in compare_df.columns:
+                    rename_map['판매량'] = '실판매'
+                compare_df = compare_df.rename(columns=rename_map)
+                # 필요한 컬럼만 사용
+                if not {'판매일자', '실판매'}.issubset(compare_df.columns):
+                    raise KeyError(f"엑셀 파일에 '거래일자/판매량' 컬럼이 없습니다. 실제 컬럼명: {compare_df.columns.tolist()}")
+                compare_df = compare_df[['판매일자', '실판매']]
+                compare_df['판매일자'] = pd.to_datetime(compare_df['판매일자'])
+            except Exception as e:
+                flash(f'비교 상품 파일 처리 중 오류: {str(e)}', 'error')
+        # 아래에서 상세페이지 렌더링 (redirect 없이)
+    elif request.method == 'POST':
         files = request.files.getlist('files')
         uploaded_count = 0
         for file in files:
@@ -55,7 +87,10 @@ def dashboard():
                         flash(f'파일 {file.filename}: 필수 컬럼이 누락되었습니다.', 'error')
                         continue
                     upload_date = datetime.now().strftime('%Y-%m-%d')
-                    df = df.iloc[:-1]  # 마지막 행 제거
+                    drop_cols = [col for col in df.columns if '실판매' in col and '금액' in col]
+                    if drop_cols:
+                        df = df.drop(columns=drop_cols)
+                    df = df.iloc[:-1]
                     save_to_db(df, upload_date, file.filename)
                     sales_date = extract_date_from_filename(file.filename)
                     flash(f'파일 {file.filename} 업로드 완료! (판매일자: {sales_date})', 'success')
@@ -66,14 +101,16 @@ def dashboard():
             flash(f'{uploaded_count}개 파일이 성공적으로 업로드되었습니다!', 'success')
         elif not files or all(not file.filename for file in files):
             flash('파일을 선택해주세요.', 'error')
-        # POST 처리 후 반드시 redirect
         return redirect(url_for('dashboard.dashboard'))
     
-    # 파레토 상품별 거래처 수 불러오기 (먼저 정의)
-    client_counts = get_client_counts()
-    client_update_dates = get_client_update_dates()
-    current_client_count = client_counts.get(selected_product) if selected_product else 0
-    current_client_update = client_update_dates.get(selected_product) if selected_product else None
+    # 대시보드 렌더링 (GET)
+    df = load_from_db()
+    # '일반상품' 제외
+    if not df.empty:
+        df = df[df['품명'] != '(일반상품)']
+    product_list = sorted(df['품명'].unique()) if not df.empty else []
+    all_dates = sorted(pd.to_datetime(df['판매일자']).unique()) if not df.empty else []
+    search_query = request.args.get('search', '')
     
     if selected_product and selected_product in product_list:
         filtered_df = df[df['품명'] == selected_product]
@@ -91,10 +128,13 @@ def dashboard():
         }
         # 상품별 통계 추가
         stats.update(get_product_stats(df, selected_product))
-        charts = create_visualizations(df, client_count=current_client_count, product=selected_product)  # 전체 데이터용
         
-        # 거래처 수 차트 생성
-        client_chart = create_client_sales_chart(df, selected_product, current_client_count, all_dates)
+        # 주차별 거래처 수 데이터 가져오기
+        current_year = datetime.now().year
+        weekly_client_data = get_weekly_client_counts(selected_product, current_year)
+        
+        plots = create_visualizations(filtered_df, only_product=True, all_dates=all_dates, compare_df=compare_df, weekly_client_data=weekly_client_data)
+        charts = create_visualizations(df)  # 전체 데이터용
         
         alert_df = None
         a_grade_alert_df = None
@@ -120,6 +160,7 @@ def dashboard():
             'sales_dates': filtered_df['판매일자'].nunique()
         }
         charts = create_visualizations(filtered_df)
+        plots = None
         
         alert_rows = generate_inventory_alerts(df)
         alert_df = pd.DataFrame(alert_rows) if alert_rows else None
@@ -138,17 +179,26 @@ def dashboard():
         unique_dates = sorted(df['판매일자'].unique())
     
     sidebar_products = get_pareto_products(df) if not df.empty else []
+    # 파레토 상품별 거래처 수 불러오기
+    client_counts = get_client_counts()
+    # 현재 상품의 거래처 수
+    current_client_count = client_counts.get(selected_product) if selected_product else None
+    
+    # 현재 주차 거래처 수
+    current_week_client_count = None
+    if selected_product:
+        current_week_client_count = get_current_week_client_count(selected_product)
     
     return render_template('dashboard.html',
-        charts=charts, stats=stats, product_list=product_list,
+        charts=charts, plots=plots, stats=stats, product_list=product_list,
         selected_product=selected_product, alert_df=alert_df, a_grade_alert_df=a_grade_alert_df, 
         search_query=search_query, last_year=last_year, unique_dates=unique_dates,
         sidebar_products=sidebar_products,
         sidebar_products_json=json.dumps(sidebar_products),
         client_counts=client_counts,
         current_client_count=current_client_count,
-        current_client_update=current_client_update,
-        client_chart=client_chart if 'client_chart' in locals() else None
+        current_week_client_count=current_week_client_count,
+        compare_df=compare_df
     )
 
 @dashboard_bp.route('/dashboard/plot')
@@ -164,9 +214,9 @@ def dashboard_plot():
             'product_current_stock': int(filtered_df['현재고'].sum()),
             'product_7days_sales': int(filtered_df.tail(7)['실판매'].sum()),
         }
-        charts = create_visualizations(filtered_df, only_product=True, all_dates=all_dates)
+        plots = create_visualizations(filtered_df, only_product=True, all_dates=all_dates)
         return jsonify({
-            'plot': charts['sales_trend'],
+            'plot': plots['sales_trend'],
             'stats': stats,
             'product': product
         })
