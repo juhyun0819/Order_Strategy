@@ -60,19 +60,8 @@ def dashboard():
         if compare_file and compare_file.filename.endswith(('xls', 'xlsx')):
             try:
                 compare_df = pd.read_excel(compare_file)
-                # 컬럼명 표준화 및 변환
-                compare_df.columns = [col.strip() for col in compare_df.columns]
-                rename_map = {}
-                if '거래일자' in compare_df.columns:
-                    rename_map['거래일자'] = '판매일자'
-                if '판매량' in compare_df.columns:
-                    rename_map['판매량'] = '실판매'
-                compare_df = compare_df.rename(columns=rename_map)
-                # 필요한 컬럼만 사용
-                if not {'판매일자', '실판매'}.issubset(compare_df.columns):
-                    raise KeyError(f"엑셀 파일에 '거래일자/판매량' 컬럼이 없습니다. 실제 컬럼명: {compare_df.columns.tolist()}")
-                compare_df = compare_df[['판매일자', '실판매']]
-                compare_df['판매일자'] = pd.to_datetime(compare_df['판매일자'])
+                # 비교 엑셀 파일은 별도 처리 - 컬럼명 변환 없이 원본 그대로 사용
+                flash(f'비교 상품 파일 {compare_file.filename} 업로드 완료!', 'success')
             except Exception as e:
                 flash(f'비교 상품 파일 처리 중 오류: {str(e)}', 'error')
         # 아래에서 상세페이지 렌더링 (redirect 없이)

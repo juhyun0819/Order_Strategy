@@ -15,7 +15,7 @@ def create_visualizations(df, only_product=False, all_dates=None, trend_window=7
     charts = {}
     
     # 1. 판매 추세 그래프
-    sales_trend = create_sales_trend_chart(df, only_product, all_dates, trend_window, trend_frac)
+    sales_trend = create_sales_trend_chart(df, only_product, all_dates, trend_window, trend_frac, compare_df)
     if sales_trend:
         charts['sales_trend'] = sales_trend
     

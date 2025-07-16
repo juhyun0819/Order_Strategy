@@ -54,11 +54,16 @@ def calculate_calendar_week(date):
     
     return week_number
 
-def create_sales_trend_chart(df, only_product=False, all_dates=None, trend_window=7, trend_frac=0.08):
+def create_sales_trend_chart(df, only_product=False, all_dates=None, trend_window=7, trend_frac=0.08, compare_df=None):
     """판매 추세 그래프 생성 (일별)"""
     current_year = datetime.now().year
     last_year = current_year - 1
     trend_calculator = TrendCalculator(window=trend_window, frac=trend_frac)
+    
+    # 비교 데이터 처리
+    compare_data = None
+    if compare_df is not None and not compare_df.empty:
+        compare_data = process_compare_data(compare_df, current_year)
     
     if only_product:
         # 상품별 상세 페이지용 - 전체 연도 표시
@@ -124,9 +129,26 @@ def create_sales_trend_chart(df, only_product=False, all_dates=None, trend_windo
             'symbol': 'circle',
             'symbolSize': 4,
             'lineStyle': {'width': 2, 'color': '#5470c6'},
+            'itemStyle': {'color': '#5470c6'},
             'connectNulls': True
         }
     ]
+    
+    # 비교 데이터 추가
+    if compare_data:
+        print(f"비교 데이터를 그래프에 추가합니다. 데이터 길이: {len(compare_data)}")
+        series.append({
+            'name': '비교상품 판매량',
+            'type': 'line',
+            'data': safe_list(compare_data),
+            'symbol': 'diamond',
+            'symbolSize': 6,
+            'lineStyle': {'width': 2, 'color': '#ff6b6b'},
+            'itemStyle': {'color': '#ff6b6b'},
+            'connectNulls': True
+        })
+    else:
+        print("비교 데이터가 없습니다.")
     
     # 전년도 데이터 추가 (only_product=True일 때만)
     if only_product and trend_last_year:
@@ -142,32 +164,36 @@ def create_sales_trend_chart(df, only_product=False, all_dates=None, trend_windo
             'symbol': 'circle',
             'symbolSize': 4,
             'lineStyle': {'width': 2, 'color': '#91cc75'},
+            'itemStyle': {'color': '#91cc75'},
             'connectNulls': True
         })
         
         # 전년도 추세선 추가
         series.extend([
             {
-                'name': '저점 추세(LOWESS, 전년도)',
+                'name': f'저점 추세({last_year})',
                 'type': 'line',
                 'data': safe_list(trend_last_year['low']),
                 'lineStyle': {'color': '#fac858'},
+                'itemStyle': {'color': '#fac858'},
                 'symbol': 'none',
                 'connectNulls': True
             },
             {
-                'name': '고점 추세(LOWESS, 전년도)',
+                'name': f'고점 추세({last_year})',
                 'type': 'line',
                 'data': safe_list(trend_last_year['high']),
                 'lineStyle': {'color': '#ee6666'},
+                'itemStyle': {'color': '#ee6666'},
                 'symbol': 'none',
                 'connectNulls': True
             },
             {
-                'name': '중위 추세(LOWESS, 전년도)',
+                'name': f'중위 추세({last_year})',
                 'type': 'line',
                 'data': safe_list(trend_last_year['mid']),
                 'lineStyle': {'color': '#73c0de'},
+                'itemStyle': {'color': '#73c0de'},
                 'symbol': 'none',
                 'connectNulls': True
             }
@@ -177,26 +203,29 @@ def create_sales_trend_chart(df, only_product=False, all_dates=None, trend_windo
     if (only_product and any(v is not None for v in trend_data['low'])) or (not only_product and len(trend_data['low']) > 0):
         series.extend([
             {
-                'name': '저점 추세(LOWESS)',
+                'name': f'저점 추세({current_year})',
                 'type': 'line',
                 'data': safe_list(trend_data['low']),
                 'lineStyle': {'type': 'dashed', 'color': '#3ba272'},
+                'itemStyle': {'color': '#3ba272'},
                 'symbol': 'none',
                 'connectNulls': True
             },
             {
-                'name': '고점 추세(LOWESS)', 
+                'name': f'고점 추세({current_year})', 
                 'type': 'line',
                 'data': safe_list(trend_data['high']),
                 'lineStyle': {'type': 'dashed', 'color': '#fc8452'},
+                'itemStyle': {'color': '#fc8452'},
                 'symbol': 'none',
                 'connectNulls': True
             },
             {
-                'name': '중위 추세(LOWESS)',
+                'name': f'중위 추세({current_year})',
                 'type': 'line', 
                 'data': safe_list(trend_data['mid']),
                 'lineStyle': {'type': 'dashed', 'color': '#9a60b4'},
+                'itemStyle': {'color': '#9a60b4'},
                 'symbol': 'none',
                 'connectNulls': True
             }
@@ -271,12 +300,12 @@ def create_weekly_sales_chart(df, weekly_client_data=None):
         legend_data.extend([
             f'실판매({current_year})',
             f'실판매({last_year})',
-            '저점 추세(LOWESS)',
-            '고점 추세(LOWESS)',
-            '중위 추세(LOWESS)',
-            f'저점 추세(LOWESS, {last_year})',
-            f'고점 추세(LOWESS, {last_year})',
-            f'중위 추세(LOWESS, {last_year})'
+            f'저점 추세({current_year})',
+            f'고점 추세({current_year})',
+            f'중위 추세({current_year})',
+            f'저점 추세({last_year})',
+            f'고점 추세({last_year})',
+            f'중위 추세({last_year})'
         ])
         
         series_list.extend([
@@ -287,6 +316,7 @@ def create_weekly_sales_chart(df, weekly_client_data=None):
                 'symbol': 'circle',
                 'symbolSize': 4,
                 'lineStyle': {'width': 2, 'color': '#5470c6'},
+                'itemStyle': {'color': '#5470c6'},
                 'connectNulls': False
             }
         ])
@@ -328,32 +358,36 @@ def create_weekly_sales_chart(df, weekly_client_data=None):
             'symbol': 'circle',
             'symbolSize': 4,
             'lineStyle': {'width': 2, 'color': '#91cc75'},
+            'itemStyle': {'color': '#91cc75'},
             'connectNulls': False
         })
         
         # 올해 추세선을 전년도 실판매 뒤에 추가
         series_list.extend([
             {
-                'name': '저점 추세(LOWESS)',
+                'name': f'저점 추세({current_year})',
                 'type': 'line',
                 'data': low_trend,
                 'lineStyle': {'type': 'dashed', 'color': '#3ba272'},
+                'itemStyle': {'color': '#3ba272'},
                 'symbol': 'none',
                 'connectNulls': True
             },
             {
-                'name': '고점 추세(LOWESS)',
+                'name': f'고점 추세({current_year})',
                 'type': 'line',
                 'data': high_trend,
                 'lineStyle': {'type': 'dashed', 'color': '#fc8452'},
+                'itemStyle': {'color': '#fc8452'},
                 'symbol': 'none',
                 'connectNulls': True
             },
             {
-                'name': '중위 추세(LOWESS)',
+                'name': f'중위 추세({current_year})',
                 'type': 'line',
                 'data': mid_trend,
                 'lineStyle': {'type': 'dashed', 'color': '#9a60b4'},
+                'itemStyle': {'color': '#9a60b4'},
                 'symbol': 'none',
                 'connectNulls': True
             }
@@ -362,26 +396,29 @@ def create_weekly_sales_chart(df, weekly_client_data=None):
         # 전년도 추세선을 마지막에 추가
         series_list.extend([
             {
-                'name': f'저점 추세(LOWESS, {last_year})',
+                'name': f'저점 추세({last_year})',
                 'type': 'line',
                 'data': last_low_trend,
                 'lineStyle': {'color': '#fac858'},
+                'itemStyle': {'color': '#fac858'},
                 'symbol': 'none',
                 'connectNulls': True
             },
             {
-                'name': f'고점 추세(LOWESS, {last_year})',
+                'name': f'고점 추세({last_year})',
                 'type': 'line',
                 'data': last_high_trend,
                 'lineStyle': {'color': '#ee6666'},
+                'itemStyle': {'color': '#ee6666'},
                 'symbol': 'none',
                 'connectNulls': True
             },
             {
-                'name': f'중위 추세(LOWESS, {last_year})',
+                'name': f'중위 추세({last_year})',
                 'type': 'line',
                 'data': last_mid_trend,
                 'lineStyle': {'color': '#73c0de'},
+                'itemStyle': {'color': '#73c0de'},
                 'symbol': 'none',
                 'connectNulls': True
             }
@@ -478,9 +515,9 @@ def create_weekly_sales_chart(df, weekly_client_data=None):
                 
                 # 시리즈 이름도 2024년으로 수정
                 series_list[0]['name'] = f'실판매({last_year})'
-                series_list[1]['name'] = f'저점 추세(LOWESS, {last_year})'
-                series_list[2]['name'] = f'고점 추세(LOWESS, {last_year})'
-                series_list[3]['name'] = f'중위 추세(LOWESS, {last_year})'
+                series_list[1]['name'] = f'저점 추세({last_year})'
+                series_list[2]['name'] = f'고점 추세({last_year})'
+                series_list[3]['name'] = f'중위 추세({last_year})'
     
     # 전년도 데이터가 없어도 series_list[1]에 None 배열 할당
     if len(series_list) >= 2 and not df_last_year.empty:
@@ -714,6 +751,94 @@ def safe_list(arr):
     if hasattr(arr, 'tolist'):
         arr = arr.tolist()
     return [float(v) if v is not None and not (isinstance(v, float) and (v != v)) else None for v in arr]
+
+def process_compare_data(compare_df, current_year):
+    """비교 엑셀 파일 데이터 처리"""
+    try:
+        # 비교 엑셀 파일의 컬럼명을 표준화
+        compare_df = compare_df.copy()
+        
+        print(f"비교 데이터 처리 시작: 컬럼명 = {compare_df.columns.tolist()}")
+        print(f"비교 데이터 샘플:\n{compare_df.head()}")
+        
+        # 날짜와 판매량 컬럼 찾기
+        if len(compare_df.columns) >= 2:
+            # 날짜 컬럼 찾기 (거래일자, 판매일자, 날짜 등)
+            date_col = None
+            for col in compare_df.columns:
+                if any(keyword in str(col).lower() for keyword in ['거래일자', '판매일자', '날짜', 'date']):
+                    date_col = col
+                    break
+            
+            # 판매량 컬럼 찾기 (판매량, 실판매, 수량 등)
+            sales_col = None
+            for col in compare_df.columns:
+                if any(keyword in str(col).lower() for keyword in ['판매량', '실판매', '수량', 'quantity', 'sales']):
+                    sales_col = col
+                    break
+            
+            # 컬럼을 찾지 못한 경우 기본값 사용
+            if date_col is None:
+                date_col = compare_df.columns[0]
+            if sales_col is None:
+                # 판매량 컬럼이 없으면 숫자 데이터가 있는 컬럼 찾기
+                for col in compare_df.columns:
+                    if col != date_col and pd.api.types.is_numeric_dtype(compare_df[col]):
+                        sales_col = col
+                        break
+                if sales_col is None and len(compare_df.columns) >= 2:
+                    sales_col = compare_df.columns[1]  # 두 번째 컬럼 사용
+            
+            print(f"날짜 컬럼: {date_col}, 판매량 컬럼: {sales_col}")
+            
+            # 날짜 컬럼을 datetime으로 변환
+            compare_df[date_col] = pd.to_datetime(compare_df[date_col], errors='coerce')
+            
+            # 판매량 컬럼을 숫자로 변환
+            compare_df[sales_col] = pd.to_numeric(compare_df[sales_col], errors='coerce')
+            
+            print(f"날짜 변환 후 샘플:\n{compare_df.head()}")
+            
+            # 유효한 데이터만 필터링
+            compare_df = compare_df.dropna(subset=[date_col, sales_col])
+            
+            print(f"유효 데이터 필터링 후 행 수: {len(compare_df)}")
+            
+            # 현재 연도 데이터만 필터링
+            compare_df = compare_df[compare_df[date_col].dt.year == current_year]
+            
+            print(f"현재 연도 필터링 후 행 수: {len(compare_df)}")
+            
+            if not compare_df.empty:
+                # 전체 연도 날짜 범위 생성
+                full_date_range = pd.date_range(start=f'{current_year}-01-01', end=f'{current_year}-12-31', freq='D')
+                
+                # 날짜별 판매량 집계
+                daily_compare = compare_df.groupby(date_col)[sales_col].sum()
+                daily_compare = daily_compare.reindex(full_date_range)
+                
+                print(f"날짜별 집계 후 데이터 수: {len(daily_compare)}")
+                print(f"판매량이 있는 날짜 수: {daily_compare.notna().sum()}")
+                
+                # 판매량 데이터 생성
+                compare_data = [float(v) if v is not None and not pd.isna(v) else None for v in daily_compare.values]
+                
+                # None이 아닌 값이 있는지 확인
+                valid_values = [v for v in compare_data if v is not None]
+                print(f"유효한 판매량 값 수: {len(valid_values)}")
+                if valid_values:
+                    print(f"판매량 범위: {min(valid_values)} ~ {max(valid_values)}")
+                
+                return compare_data
+            else:
+                print("현재 연도에 유효한 데이터가 없습니다.")
+        
+        return None
+    except Exception as e:
+        print(f"비교 데이터 처리 중 오류: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
 
 def get_yearly_trend(df, year, trend_calculator):
     """연도별 추세 계산"""
