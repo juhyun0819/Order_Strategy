@@ -328,15 +328,25 @@ def create_sales_trend_chart(df, only_product=False, all_dates=None, trend_windo
     # 비교 데이터 추가
     if compare_data:
         print(f"비교 데이터를 그래프에 추가합니다. 데이터 길이: {len(compare_data)}")
+        max_my = max([v for v in sales_data if v is not None], default=1)
+        max_compare = max([v for v in compare_data if v is not None], default=1)
+        print(f"max_my: {max_my}")
+        print(f"max_compare: {max_compare}")
+        normalized_compare = [
+            {'value': (v * max_my / max_compare) if (v is not None and max_compare) else None, 'original': v}
+            if v is not None else None
+            for v in compare_data
+        ]
         series.append({
             'name': '비교상품 판매량',
             'type': 'line',
-            'data': safe_list(compare_data),
+            'data': normalized_compare,
             'symbol': 'diamond',
             'symbolSize': 6,
             'lineStyle': {'width': 2, 'color': '#ff6b6b'},
             'itemStyle': {'color': '#ff6b6b'},
-            'connectNulls': True
+            'connectNulls': True,
+            'yAxisIndex': 0
         })
     else:
         print("비교 데이터가 없습니다.")
@@ -871,15 +881,23 @@ def create_weekly_sales_chart(df, weekly_client_data=None, compare_df=None):
             # 데이터가 있는 주차들 사이만 연결
             compare_data_mapped = interpolate_sales_data(compare_data_mapped)
             
+            max_my = max([v for v in current_values if v is not None], default=1)
+            max_compare = max([v for v in compare_data_mapped if v is not None], default=1)
+            normalized_compare = [
+                {'value': (v * max_my / max_compare) if (v is not None and max_compare) else None, 'original': v}
+                if v is not None else None
+                for v in compare_data_mapped
+            ]
             compare_series = {
                 'name': '비교상품 주별 판매량',
                 'type': 'line',
-                'data': compare_data_mapped,
+                'data': normalized_compare,
                 'symbol': 'diamond',
                 'symbolSize': 6,
                 'lineStyle': {'width': 2, 'color': '#ff6b6b'},
                 'itemStyle': {'color': '#ff6b6b'},
-                'connectNulls': True
+                'connectNulls': True,
+                'yAxisIndex': 0
             }
     # 시리즈 순서 맞추기: 실판매(2025) 다음에 비교상품, 그 다음 실판매(2024)
     def insert_compare_series(series_list, compare_series):
