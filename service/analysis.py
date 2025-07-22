@@ -51,32 +51,20 @@ def color_pareto_analysis(df):
     return pareto_color_products
 
 def color_pareto_analysis_current_year(df):
-    """올해(2025년) 데이터 기준 컬러별 파레토 분석 - 상품-컬러 조합으로 파레토 분석"""
+    """올해(2025년) 데이터 기준 컬러별 파레토 분석 - (상품명, 컬러명) 튜플 리스트 반환"""
     if df.empty or '칼라' not in df.columns:
         return []
-    
-    # 올해(2025년) 데이터만 필터링
     df['판매일자'] = pd.to_datetime(df['판매일자'])
     current_year_df = df[df['판매일자'].dt.year == 2025]
-    
     if current_year_df.empty:
         return []
-    
-    # 상품-컬러 조합으로 판매량 집계
     color_sales = current_year_df.groupby(['품명', '칼라'])['실판매'].sum().reset_index()
-    color_sales['상품_컬러'] = color_sales['품명'] + ' - ' + color_sales['칼라']
-    
-    # 전체 판매량 대비 비율 계산
     total_sales = color_sales['실판매'].sum()
     color_sales['비율'] = (color_sales['실판매'] / total_sales * 100).round(2)
-    
-    # 누적 비율 계산
     color_sales = color_sales.sort_values('실판매', ascending=False)
     color_sales['누적비율'] = color_sales['비율'].cumsum()
-    
-    # 80% 기준으로 파레토 상품-컬러 선택
-    pareto_color_products = color_sales[color_sales['누적비율'] <= 80]['상품_컬러'].tolist()
-    
+    # 80% 기준으로 파레토 상품-컬러 선택 (상품명, 컬러명 튜플로 반환)
+    pareto_color_products = color_sales[color_sales['누적비율'] <= 80][['품명', '칼라']].apply(tuple, axis=1).tolist()
     return pareto_color_products
 
 def weekly_analysis(df):

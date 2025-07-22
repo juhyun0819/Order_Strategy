@@ -126,14 +126,14 @@
           
           <!-- 컬러별 파레토 리스트 -->
           <ul id="color-list" class="space-y-1 hidden">
-            {% for color in sidebar_colors %}
+            {% for product, color in sidebar_colors %}
             <li>
               <a
-                href="/dashboard?product={{ selected_product }}&color={{ color }}"
-                class="block px-3 py-2 rounded-lg transition-colors truncate {% if selected_color == color %} bg-blue-100 text-blue-700 font-bold {% else %} text-gray-700 hover:bg-blue-50 hover:text-blue-700 {% endif %}"
-                title="{{ color }}"
+                href="/dashboard?product={{ product }}&color={{ color }}"
+                class="block px-3 py-2 rounded-lg transition-colors truncate {% if selected_product == product and selected_color == color %} bg-blue-100 text-blue-700 font-bold {% else %} text-gray-700 hover:bg-blue-50 hover:text-blue-700 {% endif %}"
+                title="{{ product }} - {{ color }}"
               >
-                <span class="mr-2 text-xs font-bold">{{ loop.index }}</span>{{ color }}
+                <span class="mr-2 text-xs font-bold">{{ loop.index }}</span>{{ product }} - {{ color }}
               </a>
             </li>
             {% endfor %}
@@ -1277,7 +1277,11 @@
             const nextItem = navigationLinks[nextIndex];
             let url = `/dashboard?product=${encodeURIComponent(nextItem.product)}`;
             if (nextItem.color) {
-              url += `&color=${encodeURIComponent(nextItem.color)}`;
+              let colorName = nextItem.color;
+              if (colorName.includes(' - ')) {
+                colorName = colorName.split(' - ').pop().trim();
+              }
+              url += `&color=${encodeURIComponent(colorName)}`;
             }
             window.location.href = url;
           }

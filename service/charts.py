@@ -426,6 +426,7 @@ def create_sales_trend_chart(df, only_product=False, all_dates=None, trend_windo
             'legend': {
                 'show': True, 
                 'top': 40,
+                'data': [s['name'] for s in series],  # legend에 시리즈 이름 명시적으로 추가
                 'selected': {
                     f'실판매({current_year})': True,
                     '비교상품 판매량': False,
