@@ -671,6 +671,8 @@ def create_weekly_sales_chart(df, weekly_client_data=None, compare_df=None):
     # X축 데이터 생성 (1-53주차로 고정)
     x_axis_data = list(range(1, 54))
     x_axis_labels = [str(week) for week in x_axis_data]
+    # 주차별 날짜 범위 정보 추가
+    week_date_ranges = get_week_date_ranges(current_year)
     
     # 데이터를 1-53주차에 매핑
     week_to_index = {week: idx for idx, week in enumerate(x_axis_data)}
@@ -911,7 +913,8 @@ def create_weekly_sales_chart(df, weekly_client_data=None, compare_df=None):
         'data': {
             'weeks': x_axis_labels,
             'values': current_values if has_current_year_data else [],
-            'trend_alerts': trend_alerts
+            'trend_alerts': trend_alerts,
+            'week_date_ranges': week_date_ranges  # 추가: 주차별 날짜 범위 정보
         },
         'config': {
             'tooltip': {
@@ -919,7 +922,8 @@ def create_weekly_sales_chart(df, weekly_client_data=None, compare_df=None):
                 'axisPointer': {
                     'show': False
                 },
-                'formatter': 'function(params) { var result = params[0].axisValue + "<br/>"; params.forEach(function(param) { if (param.value !== null && param.value !== undefined) { result += param.marker + param.seriesName + ": " + param.value + "<br/>"; } }); return result; }'
+                # 아래는 JS에서 사용할 tooltip 포맷터 예시 (주차별 날짜 범위 표시)
+                # 'formatter': 'function(params) {\n  var week = params[0].axisValue;\n  var weekDateRanges = params[0].dataIndex !== undefined && window.weekDateRanges ? window.weekDateRanges : {};\n  var dateRange = weekDateRanges[week] || "";\n  var result = week + "주차 (" + dateRange + ")<br/>";\n  params.forEach(function(param) {\n    if (param.value !== null && param.value !== undefined) {\n      result += param.marker + param.seriesName + ": " + param.value + "<br/>";\n    }\n  });\n  return result;\n}'
             },
             'xAxis': {
                 'type': 'category',
@@ -1251,3 +1255,19 @@ def get_yearly_trend(df, year, trend_calculator):
         low_trend = high_trend = mid_trend = [0] * len(sales_data)
     
     return {'low': low_trend, 'high': high_trend, 'mid': mid_trend} 
+
+def get_week_date_ranges(year):
+    """해당 연도의 각 주차별(1~53) 실제 날짜 범위(월/일~월/일) 반환"""
+    from datetime import date, timedelta
+    week_ranges = {}
+    # 1~53주차 반복
+    for week in range(1, 54):
+        # ISO 주차의 첫째 날(월요일) 구하기
+        try:
+            start = date.fromisocalendar(year, week, 1)
+            end = date.fromisocalendar(year, week, 7)
+            week_ranges[week] = f"{start.month}/{start.day}~{end.month}/{end.day}"
+        except ValueError:
+            # 해당 연도에 없는 주차는 건너뜀
+            continue
+    return week_ranges 

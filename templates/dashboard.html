@@ -344,6 +344,8 @@
             </div>
             <script>
               document.addEventListener('DOMContentLoaded', function() {
+                  // 주차별 날짜 범위 정보를 window에 할당
+                  window.weekDateRanges = {{ plots.weekly_sales_trend.data.week_date_ranges|tojson }};
                   var option_weekly_sales_trend = {{ plots.weekly_sales_trend.config|tojson }};
                   option_weekly_sales_trend.title = undefined;
                   option_weekly_sales_trend.tooltip = {
@@ -355,7 +357,14 @@
                           }
                       },
                       formatter: function(params) {
-                          var result = params[0].axisValue + '<br/>';
+                          var week = params[0].axisValue;
+                          var weekDateRanges = window.weekDateRanges || {};
+                          var dateRange = weekDateRanges[week] || "";
+                          var result = week + '주차';
+                          if (dateRange) {
+                              result += ' (' + dateRange + ')';
+                          }
+                          result += '<br/>';
                           params.forEach(function(param) {
                               if (param.value !== null && param.value !== undefined) {
                                   result += param.marker + param.seriesName + ': ' + param.value + '<br/>';

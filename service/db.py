@@ -54,7 +54,7 @@ def reset_db():
     init_db()
 
 def save_to_db(df, upload_date, filename):
-    """데이터프레임을 데이터베이스에 저장"""
+    """데이터프레임을 데이터베이스에 저장 (동일 제목 파일 업로드 시 기존 데이터 교체)"""
     conn = sqlite3.connect('inventory.db')
     sales_date = extract_date_from_filename(filename)
     df['upload_date'] = upload_date
@@ -62,6 +62,11 @@ def save_to_db(df, upload_date, filename):
     # 실판매가 0인 행은 저장하지 않음
     df = df[df['실판매'] != 0]
     if not df.empty:
+        # 기존 데이터 삭제 (판매일자 기준)
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM sales_data WHERE 판매일자 = ?", (sales_date,))
+        conn.commit()
+        # 새 데이터 저장
         df.to_sql('sales_data', conn, if_exists='append', index=False)
     conn.close()
 
