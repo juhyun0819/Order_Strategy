@@ -297,7 +297,7 @@
               </h3>
               <div
                 id="echart-product-sales-trend"
-                style="width: 100%; height: 300px"
+                style="width: 100%; height: 450px"
               ></div>
             </div>
             <script>
@@ -317,7 +317,7 @@
               <h3 class="text-lg font-semibold text-gray-900 mb-4">주별 판매량</h3>
               <div
                 id="echart-product-weekly-sales-trend"
-                style="width: 100%; height: 300px"
+                style="width: 100%; height: 450px"
               ></div>
             </div>
             <script>
@@ -980,8 +980,6 @@
               var option_sales_trend = {{ charts.sales_trend.config|tojson }};
               option_sales_trend.title = {text: '{{ charts.sales_trend.title }}', left: 'center'};
               option_sales_trend.tooltip = {trigger: 'axis'};
-              option_sales_trend.legend = option_sales_trend.legend || {};
-              option_sales_trend.legend.top = 'bottom';
               var chartDom1 = document.getElementById('echart-sales-trend');
               if (chartDom1) {
                   var myChart1 = echarts.init(chartDom1);

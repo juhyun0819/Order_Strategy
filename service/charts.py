@@ -224,6 +224,81 @@ def create_sales_trend_chart(df, only_product=False, all_dates=None, trend_windo
                             }
                         })
     
+    # 미송잔량과 현재고 데이터 추가 (2025년 데이터만, 파일 업로드 날짜까지 이전 값 유지)
+    inventory_data = []
+    pending_data = []
+    
+    if only_product and not df.empty:
+        # 상품별 페이지에서만 재고 데이터 표시
+        df_copy = df.copy()
+        df_copy['판매일자'] = pd.to_datetime(df_copy['판매일자'])
+        
+        # 2025년 데이터만 필터링
+        df_2025 = df_copy[df_copy['판매일자'].dt.year == current_year]
+        
+        if not df_2025.empty:
+            # 날짜별로 정렬
+            df_2025 = df_2025.sort_values('판매일자')
+            
+            # 해당 상품의 가장 최근 재고 데이터 날짜 찾기
+            last_inventory_date = None
+            last_pending_date = None
+            
+            # 현재고와 미송잔량이 있는 마지막 날짜 찾기
+            for _, row in df_2025.iterrows():
+                if row['현재고'] is not None and not pd.isna(row['현재고']) and row['현재고'] != 0:
+                    last_inventory_date = row['판매일자']
+                if row['미송잔량'] is not None and not pd.isna(row['미송잔량']) and row['미송잔량'] != 0:
+                    last_pending_date = row['판매일자']
+            
+            # 가장 최근 파일 업로드 날짜 찾기 (전체 데이터에서)
+            latest_upload_date = df_copy['판매일자'].max()
+            
+            # 전체 날짜 범위에 대해 재고 데이터 매핑
+            last_inventory = None
+            last_pending = None
+            
+            for date in full_date_range if only_product else dates:
+                if only_product:
+                    # 전체 연도 표시 모드
+                    date_str = date.strftime('%Y-%m-%d')
+                    date_dt = pd.to_datetime(date_str)
+                else:
+                    # 데이터가 있는 날짜만 표시 모드
+                    date_str = date
+                    date_dt = pd.to_datetime(date_str)
+                
+                # 해당 날짜의 데이터가 있는지 확인
+                date_data = df_2025[df_2025['판매일자'] == date_dt]
+                
+                if not date_data.empty:
+                    # 해당 날짜의 미송잔량과 현재고 합계
+                    pending_sum = date_data['미송잔량'].sum()
+                    inventory_sum = date_data['현재고'].sum()
+                    
+                    # 유효한 값인 경우 업데이트
+                    if inventory_sum is not None and not pd.isna(inventory_sum) and inventory_sum != 0:
+                        last_inventory = float(inventory_sum)
+                    if pending_sum is not None and not pd.isna(pending_sum) and pending_sum != 0:
+                        last_pending = float(pending_sum)
+                
+                # 현재 날짜가 가장 최근 파일 업로드 날짜를 넘어서면 None으로 설정
+                if date_dt > latest_upload_date:
+                    last_inventory = None
+                    last_pending = None
+                
+                # 현재 날짜의 재고 데이터 추가
+                inventory_data.append(last_inventory)
+                pending_data.append(last_pending)
+        else:
+            # 2025년 데이터가 없으면 빈 배열
+            inventory_data = []
+            pending_data = []
+    else:
+        # 메인 대시보드에서는 재고 데이터 표시 안함
+        inventory_data = []
+        pending_data = []
+    
     # 차트 설정
     series = [
         {
@@ -306,6 +381,33 @@ def create_sales_trend_chart(df, only_product=False, all_dates=None, trend_windo
             }
         ])
     
+    # 재고 데이터 시리즈 추가 (상품별 페이지에서만)
+    if only_product and inventory_data and any(v is not None for v in inventory_data):
+        series.append({
+            'name': '현재고',
+            'type': 'line',
+            'data': safe_list(inventory_data),
+            'symbol': 'diamond',
+            'symbolSize': 6,
+            'lineStyle': {'width': 2, 'color': '#8B4513'},
+            'itemStyle': {'color': '#8B4513'},
+            'connectNulls': True,
+            'yAxisIndex': 0  # 왼쪽 y축 사용
+        })
+    
+    if only_product and pending_data and any(v is not None for v in pending_data):
+        series.append({
+            'name': '미송잔량',
+            'type': 'line',
+            'data': safe_list(pending_data),
+            'symbol': 'triangle',
+            'symbolSize': 6,
+            'lineStyle': {'width': 2, 'color': '#000000'},
+            'itemStyle': {'color': '#000000'},
+            'connectNulls': True,
+            'yAxisIndex': 0  # 왼쪽 y축 사용
+        })
+    
     # 올해 추세선 추가
     if (only_product and any(v is not None for v in trend_data['low'])) or (not only_product and len(trend_data['low']) > 0):
         series.extend([
@@ -351,9 +453,25 @@ def create_sales_trend_chart(df, only_product=False, all_dates=None, trend_windo
             }
         },
         'config': {
-            'legend': {'show': True},
+            'legend': {
+                'show': True, 
+                'top': 40,
+                'selected': {
+                    f'실판매({current_year})': True,
+                    '비교상품 판매량': True,
+                    f'실판매({last_year})': True if only_product and trend_last_year else True,
+                    '현재고': False if only_product else True,
+                    '미송잔량': False if only_product else True,
+                    f'저점 추세({last_year})': False if only_product and trend_last_year else True,
+                    f'고점 추세({last_year})': False if only_product and trend_last_year else True,
+                    f'중위 추세({last_year})': True if only_product and trend_last_year else False,
+                    f'저점 추세({current_year})': False,
+                    f'고점 추세({current_year})': False,
+                    f'중위 추세({current_year})': True
+                }
+            },
             'xAxis': {'type': 'category', 'name': '월', 'data': dates},
-            'yAxis': {'type': 'value', 'name': '판매량'},
+            'yAxis': {'type': 'value', 'name': '판매량/재고량'},
             'series': series,
             'dataZoom': [
                 {
@@ -750,7 +868,18 @@ def create_weekly_sales_chart(df, weekly_client_data=None):
             'series': series_list,
             'legend': {
                 'show': True,
-                'data': [series['name'] for series in series_list]
+                'data': [series['name'] for series in series_list],
+                'selected': {
+                    f'실판매({current_year})': True,
+                    f'실판매({last_year})': True,
+                    '거래처 수': True,
+                    f'저점 추세({last_year})': False,
+                    f'고점 추세({last_year})': False,
+                    f'중위 추세({last_year})': True,
+                    f'저점 추세({current_year})': False,
+                    f'고점 추세({current_year})': False,
+                    f'중위 추세({current_year})': True
+                }
             },
             'dataZoom': [
                 {
