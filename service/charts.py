@@ -327,11 +327,13 @@ def create_sales_trend_chart(df, only_product=False, all_dates=None, trend_windo
     
     # 비교 데이터 추가
     if compare_data:
-        print(f"비교 데이터를 그래프에 추가합니다. 데이터 길이: {len(compare_data)}")
-        max_my = max([v for v in sales_data if v is not None], default=1)
+        df['판매일자'] = pd.to_datetime(df['판매일자'])
+        max_my_this = df[df['판매일자'].dt.year == current_year]['실판매'].max()
+        max_my_last = df[df['판매일자'].dt.year == last_year]['실판매'].max()
+        max_my = max(max_my_this if not pd.isna(max_my_this) else 0,
+                    max_my_last if not pd.isna(max_my_last) else 0,
+                    1)
         max_compare = max([v for v in compare_data if v is not None], default=1)
-        print(f"max_my: {max_my}")
-        print(f"max_compare: {max_compare}")
         normalized_compare = [
             {'value': (v * max_my / max_compare) if (v is not None and max_compare) else None, 'original': v}
             if v is not None else None
@@ -881,7 +883,12 @@ def create_weekly_sales_chart(df, weekly_client_data=None, compare_df=None):
             # 데이터가 있는 주차들 사이만 연결
             compare_data_mapped = interpolate_sales_data(compare_data_mapped)
             
-            max_my = max([v for v in current_values if v is not None], default=1)
+            df['판매일자'] = pd.to_datetime(df['판매일자'])
+            max_my_this = df[df['판매일자'].dt.year == current_year]['실판매'].max()
+            max_my_last = df[df['판매일자'].dt.year == last_year]['실판매'].max()
+            max_my = max(max_my_this if not pd.isna(max_my_this) else 0,
+                        max_my_last if not pd.isna(max_my_last) else 0,
+                        1)
             max_compare = max([v for v in compare_data_mapped if v is not None], default=1)
             normalized_compare = [
                 {'value': (v * max_my / max_compare) if (v is not None and max_compare) else None, 'original': v}
