@@ -185,55 +185,7 @@ def create_sales_trend_chart(df, only_product=False, all_dates=None, trend_windo
         }
         trend_last_year = None
     
-        # 작년 추세선을 벗어나는 지점들을 markPoint로 표시
-    mark_points = []
-    if only_product and trend_last_year:
-        for i, sales_value in enumerate(sales_data):
-            if sales_value is not None and i < len(trend_last_year['high']) and i < len(trend_last_year['low']):
-                high_threshold = trend_last_year['high'][i]
-                low_threshold = trend_last_year['low'][i]
-                
-                if high_threshold is not None and low_threshold is not None:
-                    if sales_value > high_threshold:
-                        # 고점 추세보다 높은 경우 - 빨간색 markPoint
-                        mark_points.append({
-                            'name': f'{sales_value}',
-                            'value': sales_value,
-                            'xAxis': i,
-                            'yAxis': sales_value,
-                            'itemStyle': {'color': '#ff4444'},
-                            'symbol': 'circle',
-                            'symbolSize': 12,
-                            'label': {
-                                'show': True,
-                                'position': 'top',
-                                'formatter': f'{sales_value}',
-                                'fontSize': 12,
-                                'fontWeight': 'bold',
-                                'color': '#ff4444'
-                            }
-                        })
-                    elif sales_value < low_threshold:
-                        # 저점 추세보다 낮은 경우 - 주황색 markPoint
-                        mark_points.append({
-                            'name': f'{sales_value}',
-                            'value': sales_value,
-                            'xAxis': i,
-                            'yAxis': sales_value,
-                            'itemStyle': {'color': '#ff8800'},
-                            'symbol': 'circle',
-                            'symbolSize': 12,
-                            'label': {
-                                'show': True,
-                                'position': 'bottom',
-                                'formatter': f'{sales_value}',
-                                'fontSize': 12,
-                                'fontWeight': 'bold',
-                                'color': '#ff8800'
-                            }
-                        })
-    
-    # 미송잔량과 현재고 데이터 추가 (2025년 데이터만, 파일 업로드 날짜까지 이전 값 유지)
+    # 재고 데이터 추가 (2025년 데이터만, 파일 업로드 날짜까지 이전 값 유지)
     inventory_data = []
     pending_data = []
     
@@ -318,10 +270,7 @@ def create_sales_trend_chart(df, only_product=False, all_dates=None, trend_windo
             'symbolSize': 4,
             'lineStyle': {'width': 2, 'color': '#5470c6'},
             'itemStyle': {'color': '#5470c6'},
-            'connectNulls': True,
-            'markPoint': {
-                'data': mark_points
-            }
+            'connectNulls': True
         }
     ]
     
@@ -575,55 +524,55 @@ def create_weekly_sales_chart(df, weekly_client_data=None, compare_df=None):
             low_trend = high_trend = mid_trend = current_values
         
         # 작년 추세선을 벗어나는 지점들을 markPoint로 표시
-        mark_points = []
-        if len(last_year_values) > 2 and len(current_values) > 0:
-            for i, (week, current_value) in enumerate(zip(weekly_sales['주차'].tolist(), current_values)):
-                # 해당 주차의 전년도 추세선 값 찾기
-                if week in weekly_sales_last['주차'].values:
-                    last_year_idx = weekly_sales_last[weekly_sales_last['주차'] == week].index[0]
-                    if last_year_idx < len(last_high_trend) and last_year_idx < len(last_low_trend):
-                        high_threshold = last_high_trend[last_year_idx]
-                        low_threshold = last_low_trend[last_year_idx]
+        # mark_points = []
+        # if len(last_year_values) > 2 and len(current_values) > 0:
+        #     for i, (week, current_value) in enumerate(zip(weekly_sales['주차'].tolist(), current_values)):
+        #         # 해당 주차의 전년도 추세선 값 찾기
+        #         if week in weekly_sales_last['주차'].values:
+        #             last_year_idx = weekly_sales_last[weekly_sales_last['주차'] == week].index[0]
+        #             if last_year_idx < len(last_high_trend) and last_year_idx < len(last_low_trend):
+        #                 high_threshold = last_high_trend[last_year_idx]
+        #                 low_threshold = last_low_trend[last_year_idx]
                         
-                        if high_threshold is not None and low_threshold is not None:
-                            if current_value > high_threshold:
-                                # 고점 추세보다 높은 경우 - 빨간색 markPoint
-                                mark_points.append({
-                                    'name': f'{current_value}',
-                                    'value': current_value,
-                                    'xAxis': week - 1,  # 주차는 1부터 시작하므로 인덱스는 0부터
-                                    'yAxis': current_value,
-                                    'itemStyle': {'color': '#ff4444'},
-                                    'symbol': 'circle',
-                                    'symbolSize': 12,
-                                    'label': {
-                                        'show': True,
-                                        'position': 'top',
-                                        'formatter': f'{current_value}',
-                                        'fontSize': 12,
-                                        'fontWeight': 'bold',
-                                        'color': '#ff4444'
-                                    }
-                                })
-                            elif current_value < low_threshold:
-                                # 저점 추세보다 낮은 경우 - 주황색 markPoint
-                                mark_points.append({
-                                    'name': f'{current_value}',
-                                    'value': current_value,
-                                    'xAxis': week - 1,  # 주차는 1부터 시작하므로 인덱스는 0부터
-                                    'yAxis': current_value,
-                                    'itemStyle': {'color': '#ff8800'},
-                                    'symbol': 'circle',
-                                    'symbolSize': 12,
-                                    'label': {
-                                        'show': True,
-                                        'position': 'bottom',
-                                        'formatter': f'{current_value}',
-                                        'fontSize': 12,
-                                        'fontWeight': 'bold',
-                                        'color': '#ff8800'
-                                    }
-                                })
+        #                 if high_threshold is not None and low_threshold is not None:
+        #                     if current_value > high_threshold:
+        #                         # 고점 추세보다 높은 경우 - 빨간색 markPoint
+        #                         mark_points.append({
+        #                             'name': f'{current_value}',
+        #                             'value': current_value,
+        #                             'xAxis': week - 1,  # 주차는 1부터 시작하므로 인덱스는 0부터
+        #                             'yAxis': current_value,
+        #                             'itemStyle': {'color': '#ff4444'},
+        #                             'symbol': 'circle',
+        #                             'symbolSize': 12,
+        #                             'label': {
+        #                                 'show': True,
+        #                                 'position': 'top',
+        #                                 'formatter': f'{current_value}',
+        #                                 'fontSize': 12,
+        #                                 'fontWeight': 'bold',
+        #                                 'color': '#ff4444'
+        #                             }
+        #                         })
+        #                     elif current_value < low_threshold:
+        #                         # 저점 추세보다 낮은 경우 - 주황색 markPoint
+        #                         mark_points.append({
+        #                             'name': f'{current_value}',
+        #                             'value': current_value,
+        #                             'xAxis': week - 1,  # 주차는 1부터 시작하므로 인덱스는 0부터
+        #                             'yAxis': current_value,
+        #                             'itemStyle': {'color': '#ff8800'},
+        #                             'symbol': 'circle',
+        #                             'symbolSize': 12,
+        #                             'label': {
+        #                                 'show': True,
+        #                                 'position': 'bottom',
+        #                                 'formatter': f'{current_value}',
+        #                                 'fontSize': 12,
+        #                                 'fontWeight': 'bold',
+        #                                 'color': '#ff8800'
+        #                             }
+        #                         })
         
         # 올해 실판매 시리즈 추가 (먼저 추가)
         series_list.append({
@@ -634,13 +583,7 @@ def create_weekly_sales_chart(df, weekly_client_data=None, compare_df=None):
             'symbolSize': 4,
             'lineStyle': {'width': 2, 'color': '#5470c6'},
             'itemStyle': {'color': '#5470c6'},
-            'connectNulls': True,
-            'markPoint': {
-                'data': mark_points
-            },
-            'tooltip': {
-                'formatter': 'function(params) { if (params.value !== null && params.value !== undefined) { return params.marker + params.seriesName + ": " + params.value; } return ""; }'
-            }
+            'connectNulls': True
         })
     
 
