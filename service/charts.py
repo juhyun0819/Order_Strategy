@@ -118,8 +118,17 @@ def create_sales_trend_chart(df, only_product=False, all_dates=None, trend_windo
     
     # 비교 데이터 처리
     compare_data = None
+    print(f"비교 데이터 처리 시작 - compare_df: {compare_df is not None}")
     if compare_df is not None and not compare_df.empty:
+        print(f"비교 데이터 처리 - compare_df shape: {compare_df.shape}")
+        print(f"비교 데이터 처리 - compare_df columns: {compare_df.columns.tolist()}")
         compare_data = process_compare_data(compare_df, current_year)
+        print(f"비교 데이터 처리 결과 - compare_data: {compare_data is not None}")
+        if compare_data:
+            print(f"비교 데이터 처리 결과 - 데이터 길이: {len(compare_data)}")
+            print(f"비교 데이터 처리 결과 - 유효한 값 수: {len([v for v in compare_data if v is not None])}")
+    else:
+        print("비교 데이터가 없습니다.")
     
     if only_product:
         # 상품별 상세 페이지용 - 전체 연도 표시
@@ -176,53 +185,80 @@ def create_sales_trend_chart(df, only_product=False, all_dates=None, trend_windo
         }
         trend_last_year = None
     
-        # 작년 추세선을 벗어나는 지점들을 markPoint로 표시
-    mark_points = []
-    if only_product and trend_last_year:
-        for i, sales_value in enumerate(sales_data):
-            if sales_value is not None and i < len(trend_last_year['high']) and i < len(trend_last_year['low']):
-                high_threshold = trend_last_year['high'][i]
-                low_threshold = trend_last_year['low'][i]
+    # 재고 데이터 추가 (2025년 데이터만, 파일 업로드 날짜까지 이전 값 유지)
+    inventory_data = []
+    pending_data = []
+    
+    if only_product and not df.empty:
+        # 상품별 페이지에서만 재고 데이터 표시
+        df_copy = df.copy()
+        df_copy['판매일자'] = pd.to_datetime(df_copy['판매일자'])
+        
+        # 2025년 데이터만 필터링
+        df_2025 = df_copy[df_copy['판매일자'].dt.year == current_year]
+        
+        if not df_2025.empty:
+            # 날짜별로 정렬
+            df_2025 = df_2025.sort_values('판매일자')
+            
+            # 해당 상품의 가장 최근 재고 데이터 날짜 찾기
+            last_inventory_date = None
+            last_pending_date = None
+            
+            # 현재고와 미송잔량이 있는 마지막 날짜 찾기
+            for _, row in df_2025.iterrows():
+                if row['현재고'] is not None and not pd.isna(row['현재고']) and row['현재고'] != 0:
+                    last_inventory_date = row['판매일자']
+                if row['미송잔량'] is not None and not pd.isna(row['미송잔량']) and row['미송잔량'] != 0:
+                    last_pending_date = row['판매일자']
+            
+            # 가장 최근 파일 업로드 날짜 찾기 (전체 데이터에서)
+            latest_upload_date = df_copy['판매일자'].max()
+            
+            # 전체 날짜 범위에 대해 재고 데이터 매핑
+            last_inventory = None
+            last_pending = None
+            
+            for date in full_date_range if only_product else dates:
+                if only_product:
+                    # 전체 연도 표시 모드
+                    date_str = date.strftime('%Y-%m-%d')
+                    date_dt = pd.to_datetime(date_str)
+                else:
+                    # 데이터가 있는 날짜만 표시 모드
+                    date_str = date
+                    date_dt = pd.to_datetime(date_str)
                 
-                if high_threshold is not None and low_threshold is not None:
-                    if sales_value > high_threshold:
-                        # 고점 추세보다 높은 경우 - 빨간색 markPoint
-                        mark_points.append({
-                            'name': f'{sales_value}',
-                            'value': sales_value,
-                            'xAxis': i,
-                            'yAxis': sales_value,
-                            'itemStyle': {'color': '#ff4444'},
-                            'symbol': 'circle',
-                            'symbolSize': 12,
-                            'label': {
-                                'show': True,
-                                'position': 'top',
-                                'formatter': f'{sales_value}',
-                                'fontSize': 12,
-                                'fontWeight': 'bold',
-                                'color': '#ff4444'
-                            }
-                        })
-                    elif sales_value < low_threshold:
-                        # 저점 추세보다 낮은 경우 - 주황색 markPoint
-                        mark_points.append({
-                            'name': f'{sales_value}',
-                            'value': sales_value,
-                            'xAxis': i,
-                            'yAxis': sales_value,
-                            'itemStyle': {'color': '#ff8800'},
-                            'symbol': 'circle',
-                            'symbolSize': 12,
-                            'label': {
-                                'show': True,
-                                'position': 'bottom',
-                                'formatter': f'{sales_value}',
-                                'fontSize': 12,
-                                'fontWeight': 'bold',
-                                'color': '#ff8800'
-                            }
-                        })
+                # 해당 날짜의 데이터가 있는지 확인
+                date_data = df_2025[df_2025['판매일자'] == date_dt]
+                
+                if not date_data.empty:
+                    # 해당 날짜의 미송잔량과 현재고 합계
+                    pending_sum = date_data['미송잔량'].sum()
+                    inventory_sum = date_data['현재고'].sum()
+                    
+                    # 유효한 값인 경우 업데이트
+                    if inventory_sum is not None and not pd.isna(inventory_sum) and inventory_sum != 0:
+                        last_inventory = float(inventory_sum)
+                    if pending_sum is not None and not pd.isna(pending_sum) and pending_sum != 0:
+                        last_pending = float(pending_sum)
+                
+                # 현재 날짜가 가장 최근 파일 업로드 날짜를 넘어서면 None으로 설정
+                if date_dt > latest_upload_date:
+                    last_inventory = None
+                    last_pending = None
+                
+                # 현재 날짜의 재고 데이터 추가
+                inventory_data.append(last_inventory)
+                pending_data.append(last_pending)
+        else:
+            # 2025년 데이터가 없으면 빈 배열
+            inventory_data = []
+            pending_data = []
+    else:
+        # 메인 대시보드에서는 재고 데이터 표시 안함
+        inventory_data = []
+        pending_data = []
     
     # 차트 설정
     series = [
@@ -234,25 +270,34 @@ def create_sales_trend_chart(df, only_product=False, all_dates=None, trend_windo
             'symbolSize': 4,
             'lineStyle': {'width': 2, 'color': '#5470c6'},
             'itemStyle': {'color': '#5470c6'},
-            'connectNulls': True,
-            'markPoint': {
-                'data': mark_points
-            }
+            'connectNulls': True
         }
     ]
     
     # 비교 데이터 추가
     if compare_data:
-        print(f"비교 데이터를 그래프에 추가합니다. 데이터 길이: {len(compare_data)}")
+        df['판매일자'] = pd.to_datetime(df['판매일자'])
+        max_my_this = df[df['판매일자'].dt.year == current_year]['실판매'].max()
+        max_my_last = df[df['판매일자'].dt.year == last_year]['실판매'].max()
+        max_my = max(max_my_this if not pd.isna(max_my_this) else 0,
+                    max_my_last if not pd.isna(max_my_last) else 0,
+                    1)
+        max_compare = max([v for v in compare_data if v is not None], default=1)
+        normalized_compare = [
+            {'value': (v * max_my / max_compare) if (v is not None and max_compare) else None, 'original': v}
+            if v is not None else None
+            for v in compare_data
+        ]
         series.append({
             'name': '비교상품 판매량',
             'type': 'line',
-            'data': safe_list(compare_data),
+            'data': normalized_compare,
             'symbol': 'diamond',
             'symbolSize': 6,
             'lineStyle': {'width': 2, 'color': '#ff6b6b'},
             'itemStyle': {'color': '#ff6b6b'},
-            'connectNulls': True
+            'connectNulls': True,
+            'yAxisIndex': 0
         })
     else:
         print("비교 데이터가 없습니다.")
@@ -306,6 +351,33 @@ def create_sales_trend_chart(df, only_product=False, all_dates=None, trend_windo
             }
         ])
     
+    # 재고 데이터 시리즈 추가 (상품별 페이지에서만)
+    if only_product and inventory_data and any(v is not None for v in inventory_data):
+        series.append({
+            'name': '현재고',
+            'type': 'line',
+            'data': safe_list(inventory_data),
+            'symbol': 'diamond',
+            'symbolSize': 6,
+            'lineStyle': {'width': 2, 'color': '#8B4513'},
+            'itemStyle': {'color': '#8B4513'},
+            'connectNulls': True,
+            'yAxisIndex': 0  # 왼쪽 y축 사용
+        })
+    
+    if only_product and pending_data and any(v is not None for v in pending_data):
+        series.append({
+            'name': '미송잔량',
+            'type': 'line',
+            'data': safe_list(pending_data),
+            'symbol': 'triangle',
+            'symbolSize': 6,
+            'lineStyle': {'width': 2, 'color': '#000000'},
+            'itemStyle': {'color': '#000000'},
+            'connectNulls': True,
+            'yAxisIndex': 0  # 왼쪽 y축 사용
+        })
+    
     # 올해 추세선 추가
     if (only_product and any(v is not None for v in trend_data['low'])) or (not only_product and len(trend_data['low']) > 0):
         series.extend([
@@ -351,9 +423,25 @@ def create_sales_trend_chart(df, only_product=False, all_dates=None, trend_windo
             }
         },
         'config': {
-            'legend': {'show': True},
+            'legend': {
+                'show': True, 
+                'top': 40,
+                'selected': {
+                    f'실판매({current_year})': True,
+                    '비교상품 판매량': False,
+                    f'실판매({last_year})': True if only_product and trend_last_year else True,
+                    '현재고': False if only_product else True,
+                    '미송잔량': False if only_product else True,
+                    f'저점 추세({last_year})': False if only_product and trend_last_year else True,
+                    f'고점 추세({last_year})': False if only_product and trend_last_year else True,
+                    f'중위 추세({last_year})': True if only_product and trend_last_year else False,
+                    f'저점 추세({current_year})': False,
+                    f'고점 추세({current_year})': False,
+                    f'중위 추세({current_year})': True
+                }
+            },
             'xAxis': {'type': 'category', 'name': '월', 'data': dates},
-            'yAxis': {'type': 'value', 'name': '판매량'},
+            'yAxis': {'type': 'value', 'name': '판매량/재고량'},
             'series': series,
             'dataZoom': [
                 {
@@ -375,7 +463,7 @@ def create_sales_trend_chart(df, only_product=False, all_dates=None, trend_windo
         }
     }
 
-def create_weekly_sales_chart(df, weekly_client_data=None):
+def create_weekly_sales_chart(df, weekly_client_data=None, compare_df=None):
     """주별 판매량 그래프 생성"""
     current_year = datetime.now().year
     last_year = current_year - 1
@@ -436,55 +524,55 @@ def create_weekly_sales_chart(df, weekly_client_data=None):
             low_trend = high_trend = mid_trend = current_values
         
         # 작년 추세선을 벗어나는 지점들을 markPoint로 표시
-        mark_points = []
-        if len(last_year_values) > 2 and len(current_values) > 0:
-            for i, (week, current_value) in enumerate(zip(weekly_sales['주차'].tolist(), current_values)):
-                # 해당 주차의 전년도 추세선 값 찾기
-                if week in weekly_sales_last['주차'].values:
-                    last_year_idx = weekly_sales_last[weekly_sales_last['주차'] == week].index[0]
-                    if last_year_idx < len(last_high_trend) and last_year_idx < len(last_low_trend):
-                        high_threshold = last_high_trend[last_year_idx]
-                        low_threshold = last_low_trend[last_year_idx]
+        # mark_points = []
+        # if len(last_year_values) > 2 and len(current_values) > 0:
+        #     for i, (week, current_value) in enumerate(zip(weekly_sales['주차'].tolist(), current_values)):
+        #         # 해당 주차의 전년도 추세선 값 찾기
+        #         if week in weekly_sales_last['주차'].values:
+        #             last_year_idx = weekly_sales_last[weekly_sales_last['주차'] == week].index[0]
+        #             if last_year_idx < len(last_high_trend) and last_year_idx < len(last_low_trend):
+        #                 high_threshold = last_high_trend[last_year_idx]
+        #                 low_threshold = last_low_trend[last_year_idx]
                         
-                        if high_threshold is not None and low_threshold is not None:
-                            if current_value > high_threshold:
-                                # 고점 추세보다 높은 경우 - 빨간색 markPoint
-                                mark_points.append({
-                                    'name': f'{current_value}',
-                                    'value': current_value,
-                                    'xAxis': week - 1,  # 주차는 1부터 시작하므로 인덱스는 0부터
-                                    'yAxis': current_value,
-                                    'itemStyle': {'color': '#ff4444'},
-                                    'symbol': 'circle',
-                                    'symbolSize': 12,
-                                    'label': {
-                                        'show': True,
-                                        'position': 'top',
-                                        'formatter': f'{current_value}',
-                                        'fontSize': 12,
-                                        'fontWeight': 'bold',
-                                        'color': '#ff4444'
-                                    }
-                                })
-                            elif current_value < low_threshold:
-                                # 저점 추세보다 낮은 경우 - 주황색 markPoint
-                                mark_points.append({
-                                    'name': f'{current_value}',
-                                    'value': current_value,
-                                    'xAxis': week - 1,  # 주차는 1부터 시작하므로 인덱스는 0부터
-                                    'yAxis': current_value,
-                                    'itemStyle': {'color': '#ff8800'},
-                                    'symbol': 'circle',
-                                    'symbolSize': 12,
-                                    'label': {
-                                        'show': True,
-                                        'position': 'bottom',
-                                        'formatter': f'{current_value}',
-                                        'fontSize': 12,
-                                        'fontWeight': 'bold',
-                                        'color': '#ff8800'
-                                    }
-                                })
+        #                 if high_threshold is not None and low_threshold is not None:
+        #                     if current_value > high_threshold:
+        #                         # 고점 추세보다 높은 경우 - 빨간색 markPoint
+        #                         mark_points.append({
+        #                             'name': f'{current_value}',
+        #                             'value': current_value,
+        #                             'xAxis': week - 1,  # 주차는 1부터 시작하므로 인덱스는 0부터
+        #                             'yAxis': current_value,
+        #                             'itemStyle': {'color': '#ff4444'},
+        #                             'symbol': 'circle',
+        #                             'symbolSize': 12,
+        #                             'label': {
+        #                                 'show': True,
+        #                                 'position': 'top',
+        #                                 'formatter': f'{current_value}',
+        #                                 'fontSize': 12,
+        #                                 'fontWeight': 'bold',
+        #                                 'color': '#ff4444'
+        #                             }
+        #                         })
+        #                     elif current_value < low_threshold:
+        #                         # 저점 추세보다 낮은 경우 - 주황색 markPoint
+        #                         mark_points.append({
+        #                             'name': f'{current_value}',
+        #                             'value': current_value,
+        #                             'xAxis': week - 1,  # 주차는 1부터 시작하므로 인덱스는 0부터
+        #                             'yAxis': current_value,
+        #                             'itemStyle': {'color': '#ff8800'},
+        #                             'symbol': 'circle',
+        #                             'symbolSize': 12,
+        #                             'label': {
+        #                                 'show': True,
+        #                                 'position': 'bottom',
+        #                                 'formatter': f'{current_value}',
+        #                                 'fontSize': 12,
+        #                                 'fontWeight': 'bold',
+        #                                 'color': '#ff8800'
+        #                             }
+        #                         })
         
         # 올해 실판매 시리즈 추가 (먼저 추가)
         series_list.append({
@@ -495,13 +583,7 @@ def create_weekly_sales_chart(df, weekly_client_data=None):
             'symbolSize': 4,
             'lineStyle': {'width': 2, 'color': '#5470c6'},
             'itemStyle': {'color': '#5470c6'},
-            'connectNulls': True,
-            'markPoint': {
-                'data': mark_points
-            },
-            'tooltip': {
-                'formatter': 'function(params) { if (params.value !== null && params.value !== undefined) { return params.marker + params.seriesName + ": " + params.value; } return ""; }'
-            }
+            'connectNulls': True
         })
     
 
@@ -683,6 +765,105 @@ def create_weekly_sales_chart(df, weekly_client_data=None):
             'barWidth': '60%'
         })
     
+    # 비교 상품 데이터 추가 (주별)
+    compare_series = None
+    if compare_df is not None and not compare_df.empty:
+        print(f"주별 그래프에 비교 상품 데이터 추가 - compare_df shape: {compare_df.shape}")
+        
+        # 비교 상품 데이터를 주별로 처리
+        compare_df_copy = compare_df.copy()
+        
+        # 날짜와 판매량 컬럼 찾기
+        date_col = None
+        sales_col = None
+        
+        for col in compare_df_copy.columns:
+            if any(keyword in str(col).lower() for keyword in ['거래일자', '판매일자', '날짜', 'date']):
+                date_col = col
+                break
+        
+        for col in compare_df_copy.columns:
+            if any(keyword in str(col).lower() for keyword in ['판매량', '실판매', '수량', 'quantity', 'sales']):
+                sales_col = col
+                break
+        
+        if date_col is None:
+            date_col = compare_df_copy.columns[0]
+        if sales_col is None:
+            for col in compare_df_copy.columns:
+                if col != date_col and pd.api.types.is_numeric_dtype(compare_df_copy[col]):
+                    sales_col = col
+                    break
+            if sales_col is None and len(compare_df_copy.columns) >= 2:
+                sales_col = compare_df_copy.columns[1]
+        
+        # 날짜 컬럼을 datetime으로 변환
+        compare_df_copy[date_col] = pd.to_datetime(compare_df_copy[date_col], errors='coerce')
+        
+        # 판매량 컬럼을 숫자로 변환
+        compare_df_copy[sales_col] = pd.to_numeric(compare_df_copy[sales_col], errors='coerce')
+        
+        # 유효한 데이터만 필터링
+        compare_df_copy = compare_df_copy.dropna(subset=[date_col, sales_col])
+        
+        # 현재 연도 데이터만 필터링
+        compare_df_copy = compare_df_copy[compare_df_copy[date_col].dt.year == current_year]
+        
+        if not compare_df_copy.empty:
+            # 주차 계산
+            compare_df_copy['주차'] = compare_df_copy[date_col].apply(calculate_calendar_week)
+            
+            # 주별 판매량 집계
+            weekly_compare = compare_df_copy.groupby('주차')[sales_col].sum().reset_index()
+            weekly_compare = weekly_compare.sort_values('주차')
+            
+            # 1-53주차에 매핑
+            compare_data_mapped = [None] * 53
+            for week, value in zip(weekly_compare['주차'].tolist(), weekly_compare[sales_col].tolist()):
+                if week in week_to_index:
+                    compare_data_mapped[week_to_index[week]] = float(value)
+            
+            # 데이터가 있는 주차들 사이만 연결
+            compare_data_mapped = interpolate_sales_data(compare_data_mapped)
+            
+            df['판매일자'] = pd.to_datetime(df['판매일자'])
+            max_my_this = df[df['판매일자'].dt.year == current_year]['실판매'].max()
+            max_my_last = df[df['판매일자'].dt.year == last_year]['실판매'].max()
+            max_my = max(max_my_this if not pd.isna(max_my_this) else 0,
+                        max_my_last if not pd.isna(max_my_last) else 0,
+                        1)
+            max_compare = max([v for v in compare_data_mapped if v is not None], default=1)
+            normalized_compare = [
+                {'value': (v * max_my / max_compare) if (v is not None and max_compare) else None, 'original': v}
+                if v is not None else None
+                for v in compare_data_mapped
+            ]
+            compare_series = {
+                'name': '비교상품 주별 판매량',
+                'type': 'line',
+                'data': normalized_compare,
+                'symbol': 'diamond',
+                'symbolSize': 6,
+                'lineStyle': {'width': 2, 'color': '#ff6b6b'},
+                'itemStyle': {'color': '#ff6b6b'},
+                'connectNulls': True,
+                'yAxisIndex': 0
+            }
+    # 시리즈 순서 맞추기: 실판매(2025) 다음에 비교상품, 그 다음 실판매(2024)
+    def insert_compare_series(series_list, compare_series):
+        idx_2025 = next((i for i, s in enumerate(series_list) if s['name'].startswith('실판매(2025)')), None)
+        idx_2024 = next((i for i, s in enumerate(series_list) if s['name'].startswith('실판매(2024)')), None)
+        if compare_series and idx_2025 is not None:
+            insert_idx = idx_2025 + 1
+            # 만약 실판매(2024)가 바로 뒤에 있으면 그 앞에 삽입
+            if idx_2024 is not None and idx_2024 == insert_idx:
+                series_list.insert(insert_idx, compare_series)
+            else:
+                series_list.insert(insert_idx, compare_series)
+        elif compare_series:
+            series_list.append(compare_series)
+    insert_compare_series(series_list, compare_series)
+    
     # y축 설정 (거래처 수가 있으면 이중 y축 사용)
     y_axis_config = [
         {'type': 'value', 'name': '판매량', 'position': 'left'},
@@ -750,7 +931,20 @@ def create_weekly_sales_chart(df, weekly_client_data=None):
             'series': series_list,
             'legend': {
                 'show': True,
-                'data': [series['name'] for series in series_list]
+                'data': [series['name'] for series in series_list],
+                'selected': {
+                    f'실판매({current_year})': True,
+                    f'실판매({last_year})': True,
+                    '거래처 수': False,
+                    '비교상품 판매량': False,
+                    '비교상품 주별 판매량': False,
+                    f'저점 추세({last_year})': False,
+                    f'고점 추세({last_year})': False,
+                    f'중위 추세({last_year})': True,
+                    f'저점 추세({current_year})': False,
+                    f'고점 추세({current_year})': False,
+                    f'중위 추세({current_year})': True
+                }
             },
             'dataZoom': [
                 {

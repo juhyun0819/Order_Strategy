@@ -118,7 +118,7 @@
                 class="block px-3 py-2 rounded-lg transition-colors truncate {% if selected_product == product %} bg-blue-100 text-blue-700 font-bold {% else %} text-gray-700 hover:bg-blue-50 hover:text-blue-700 {% endif %}"
                 title="{{ product }}"
               >
-                <i class="fas fa-tshirt text-gray-400 mr-2"></i>{{ product }}
+                <span class="mr-2 text-xs font-bold">{{ loop.index }}</span>{{ product }}
               </a>
             </li>
             {% endfor %}
@@ -126,14 +126,14 @@
           
           <!-- 컬러별 파레토 리스트 -->
           <ul id="color-list" class="space-y-1 hidden">
-            {% for color_product in sidebar_colors %}
+            {% for color in sidebar_colors %}
             <li>
               <a
-                href="/dashboard?product={{ color_product.split(' - ')[0] if ' - ' in color_product else color_product }}&color={{ color_product.split(' - ')[1] if ' - ' in color_product else '' }}"
-                class="block px-3 py-2 rounded-lg transition-colors truncate {% if selected_product == (color_product.split(' - ')[0] if ' - ' in color_product else color_product) and selected_color == (color_product.split(' - ')[1] if ' - ' in color_product else '') %} bg-blue-100 text-blue-700 font-bold {% else %} text-gray-700 hover:bg-blue-50 hover:text-blue-700 {% endif %}"
-                title="{{ color_product }}"
+                href="/dashboard?product={{ selected_product }}&color={{ color }}"
+                class="block px-3 py-2 rounded-lg transition-colors truncate {% if selected_color == color %} bg-blue-100 text-blue-700 font-bold {% else %} text-gray-700 hover:bg-blue-50 hover:text-blue-700 {% endif %}"
+                title="{{ color }}"
               >
-                <i class="fas fa-palette text-gray-400 mr-2"></i>{{ color_product }}
+                <span class="mr-2 text-xs font-bold">{{ loop.index }}</span>{{ color }}
               </a>
             </li>
             {% endfor %}
@@ -261,34 +261,56 @@
             </div>
             <!-- 비교 상품 업로드 UI (상품별 페이지에서만 표시) -->
             {% if selected_product %}
-            <form
-              method="post"
-              enctype="multipart/form-data"
-              class="mb-6 flex items-center gap-4"
-              style="background: #f8fafc; border-radius: 0.5rem; padding: 1rem"
-            >
-              <label
-                for="compare_file"
-                class="text-sm font-semibold text-gray-700"
-                >비교 상품 엑셀 업로드</label
+            <div class="mb-6" style="background: #f8fafc; border-radius: 0.5rem; padding: 1rem">
+              <div class="flex items-center justify-between mb-2">
+                <label class="text-sm font-semibold text-gray-700">비교 상품 관리</label>
+                {% if compare_df is not none %}
+                <form method="post" class="inline">
+                  <button
+                    type="submit"
+                    name="delete_compare"
+                    value="1"
+                    class="btn btn-danger btn-sm"
+                    onclick="return confirm('비교 상품 데이터를 삭제하시겠습니까?')"
+                  >
+                    <i class="fas fa-trash"></i> 삭제
+                  </button>
+                </form>
+                {% endif %}
+              </div>
+              <form
+                method="post"
+                enctype="multipart/form-data"
+                class="flex items-center gap-4"
               >
-              <input
-                type="file"
-                name="compare_file"
-                id="compare_file"
-                accept=".xls,.xlsx"
-                class="form-control"
-                required
-              />
-              <button
-                type="submit"
-                name="compare_upload"
-                value="1"
-                class="btn btn-primary px-4"
-              >
-                업로드
-              </button>
-            </form>
+                <label
+                  for="compare_file"
+                  class="text-sm font-semibold text-gray-700"
+                  >비교 상품 엑셀 업로드</label
+                >
+                <input
+                  type="file"
+                  name="compare_file"
+                  id="compare_file"
+                  accept=".xls,.xlsx"
+                  class="form-control"
+                  required
+                />
+                <button
+                  type="submit"
+                  name="compare_upload"
+                  value="1"
+                  class="btn btn-primary px-4"
+                >
+                  업로드
+                </button>
+              </form>
+              {% if compare_df is not none %}
+              <div class="mt-2 text-sm text-green-600">
+                <i class="fas fa-check-circle"></i> 비교 상품 데이터가 저장되어 있습니다.
+              </div>
+              {% endif %}
+            </div>
             {% endif %}
             {% if plots.sales_trend %}
             <div class="mb-6">
@@ -297,7 +319,7 @@
               </h3>
               <div
                 id="echart-product-sales-trend"
-                style="width: 100%; height: 300px"
+                style="width: 100%; height: 450px"
               ></div>
             </div>
             <script>
@@ -317,7 +339,7 @@
               <h3 class="text-lg font-semibold text-gray-900 mb-4">주별 판매량</h3>
               <div
                 id="echart-product-weekly-sales-trend"
-                style="width: 100%; height: 300px"
+                style="width: 100%; height: 450px"
               ></div>
             </div>
             <script>
@@ -980,8 +1002,6 @@
               var option_sales_trend = {{ charts.sales_trend.config|tojson }};
               option_sales_trend.title = {text: '{{ charts.sales_trend.title }}', left: 'center'};
               option_sales_trend.tooltip = {trigger: 'axis'};
-              option_sales_trend.legend = option_sales_trend.legend || {};
-              option_sales_trend.legend.top = 'bottom';
               var chartDom1 = document.getElementById('echart-sales-trend');
               if (chartDom1) {
                   var myChart1 = echarts.init(chartDom1);

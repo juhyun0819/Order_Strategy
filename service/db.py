@@ -32,6 +32,18 @@ def init_db():
             판매일자 TEXT
         )
     ''')
+    
+    # 비교 상품 데이터 테이블 추가
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS compare_products (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            product_name TEXT NOT NULL,
+            compare_data TEXT NOT NULL,
+            upload_date TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
     conn.commit()
     conn.close()
 
@@ -52,6 +64,69 @@ def save_to_db(df, upload_date, filename):
     if not df.empty:
         df.to_sql('sales_data', conn, if_exists='append', index=False)
     conn.close()
+
+def save_compare_product(product_name, compare_df, upload_date):
+    """비교 상품 데이터를 데이터베이스에 저장"""
+    import json
+    conn = sqlite3.connect('inventory.db')
+    cursor = conn.cursor()
+    
+    # 기존 데이터가 있으면 삭제
+    cursor.execute('DELETE FROM compare_products WHERE product_name = ?', (product_name,))
+    
+    # 새로운 데이터 저장
+    compare_data_json = compare_df.to_json(orient='records')
+    cursor.execute('''
+        INSERT INTO compare_products (product_name, compare_data, upload_date)
+        VALUES (?, ?, ?)
+    ''', (product_name, compare_data_json, upload_date))
+    
+    conn.commit()
+    conn.close()
+
+def load_compare_product(product_name):
+    """특정 상품의 비교 상품 데이터를 데이터베이스에서 불러오기"""
+    import json
+    import pandas as pd
+    conn = sqlite3.connect('inventory.db')
+    cursor = conn.cursor()
+    
+    cursor.execute('SELECT compare_data FROM compare_products WHERE product_name = ? ORDER BY created_at DESC LIMIT 1', (product_name,))
+    result = cursor.fetchone()
+    
+    conn.close()
+    
+    if result:
+        try:
+            compare_data_json = result[0]
+            compare_df = pd.read_json(compare_data_json, orient='records')
+            return compare_df
+        except Exception as e:
+            print(f"비교 상품 데이터 로드 중 오류: {e}")
+            return None
+    else:
+        return None
+
+def delete_compare_product(product_name):
+    """특정 상품의 비교 상품 데이터를 데이터베이스에서 삭제"""
+    conn = sqlite3.connect('inventory.db')
+    cursor = conn.cursor()
+    
+    cursor.execute('DELETE FROM compare_products WHERE product_name = ?', (product_name,))
+    
+    conn.commit()
+    conn.close()
+
+def check_compare_product_exists(product_name):
+    """특정 상품의 비교 상품 데이터가 존재하는지 확인"""
+    conn = sqlite3.connect('inventory.db')
+    cursor = conn.cursor()
+    
+    cursor.execute('SELECT COUNT(*) FROM compare_products WHERE product_name = ?', (product_name,))
+    count = cursor.fetchone()[0]
+    
+    conn.close()
+    return count > 0
 
 def load_from_db():
     """데이터베이스에서 모든 데이터 로드"""

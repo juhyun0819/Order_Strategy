@@ -56,16 +56,35 @@ def dashboard():
         return redirect(url_for('dashboard.dashboard', product=selected_product, color=selected_color))
     
     compare_df = None
-    if request.method == 'POST' and 'compare_upload' in request.form:
+    if request.method == 'POST' and 'compare_upload' in request.form and selected_product:
         compare_file = request.files.get('compare_file')
         if compare_file and compare_file.filename.endswith(('xls', 'xlsx')):
             try:
                 compare_df = pd.read_excel(compare_file)
-                # 비교 엑셀 파일은 별도 처리 - 컬럼명 변환 없이 원본 그대로 사용
-                flash(f'비교 상품 파일 {compare_file.filename} 업로드 완료!', 'success')
+                # 비교 상품 데이터를 DB에 저장
+                from service.db import save_compare_product
+                upload_date = datetime.now().strftime('%Y-%m-%d')
+                save_compare_product(selected_product, compare_df, upload_date)
+                flash(f'비교 상품 파일 {compare_file.filename} 업로드 완료! (상품: {selected_product})', 'success')
             except Exception as e:
                 flash(f'비교 상품 파일 처리 중 오류: {str(e)}', 'error')
         # 아래에서 상세페이지 렌더링 (redirect 없이)
+    elif request.method == 'POST' and 'delete_compare' in request.form and selected_product:
+        # 비교 상품 데이터 삭제
+        from service.db import delete_compare_product
+        delete_compare_product(selected_product)
+        flash(f'비교 상품 데이터가 삭제되었습니다.', 'success')
+        return redirect(url_for('dashboard.dashboard', product=selected_product, color=selected_color))
+    elif selected_product:
+        # 상품별 페이지에서 기존 비교 상품 데이터 불러오기
+        from service.db import load_compare_product, check_compare_product_exists
+        print(f"상품별 페이지 - 선택된 상품: {selected_product}")
+        print(f"상품별 페이지 - 비교 상품 데이터 존재 여부: {check_compare_product_exists(selected_product)}")
+        compare_df = load_compare_product(selected_product)
+        print(f"상품별 페이지 - 로드된 비교 상품 데이터: {compare_df is not None}")
+        if compare_df is not None:
+            print(f"상품별 페이지 - 비교 상품 데이터 shape: {compare_df.shape}")
+            print(f"상품별 페이지 - 비교 상품 데이터 columns: {compare_df.columns.tolist()}")
     elif request.method == 'POST':
         files = request.files.getlist('files')
         uploaded_count = 0
@@ -176,7 +195,7 @@ def dashboard():
             for product in pareto_products[:10]:  # 상위 10개 파레토 상품만 분석
                 product_df = filtered_df[filtered_df['품명'] == product]
                 if not product_df.empty:
-                    weekly_sales_product = create_weekly_sales_chart(product_df)
+                    weekly_sales_product = create_weekly_sales_chart(product_df, compare_df=compare_df)
                     if weekly_sales_product and 'data' in weekly_sales_product:
                         product_alerts = weekly_sales_product.get('data', {}).get('trend_alerts', [])
                         # 상품명을 알림 메시지에 추가
