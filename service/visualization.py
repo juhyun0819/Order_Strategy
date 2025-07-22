@@ -21,7 +21,7 @@ def create_visualizations(df, only_product=False, all_dates=None, trend_window=7
     
     # 2. 주별 판매량 그래프 (상품별 상세 페이지에서만)
     if only_product:
-        weekly_sales = create_weekly_sales_chart(df, weekly_client_data)
+        weekly_sales = create_weekly_sales_chart(df, weekly_client_data, compare_df)
         if weekly_sales:
             charts['weekly_sales_trend'] = weekly_sales
     

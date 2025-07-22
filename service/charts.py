@@ -118,8 +118,17 @@ def create_sales_trend_chart(df, only_product=False, all_dates=None, trend_windo
     
     # 비교 데이터 처리
     compare_data = None
+    print(f"비교 데이터 처리 시작 - compare_df: {compare_df is not None}")
     if compare_df is not None and not compare_df.empty:
+        print(f"비교 데이터 처리 - compare_df shape: {compare_df.shape}")
+        print(f"비교 데이터 처리 - compare_df columns: {compare_df.columns.tolist()}")
         compare_data = process_compare_data(compare_df, current_year)
+        print(f"비교 데이터 처리 결과 - compare_data: {compare_data is not None}")
+        if compare_data:
+            print(f"비교 데이터 처리 결과 - 데이터 길이: {len(compare_data)}")
+            print(f"비교 데이터 처리 결과 - 유효한 값 수: {len([v for v in compare_data if v is not None])}")
+    else:
+        print("비교 데이터가 없습니다.")
     
     if only_product:
         # 상품별 상세 페이지용 - 전체 연도 표시
@@ -458,7 +467,7 @@ def create_sales_trend_chart(df, only_product=False, all_dates=None, trend_windo
                 'top': 40,
                 'selected': {
                     f'실판매({current_year})': True,
-                    '비교상품 판매량': True,
+                    '비교상품 판매량': False,
                     f'실판매({last_year})': True if only_product and trend_last_year else True,
                     '현재고': False if only_product else True,
                     '미송잔량': False if only_product else True,
@@ -493,7 +502,7 @@ def create_sales_trend_chart(df, only_product=False, all_dates=None, trend_windo
         }
     }
 
-def create_weekly_sales_chart(df, weekly_client_data=None):
+def create_weekly_sales_chart(df, weekly_client_data=None, compare_df=None):
     """주별 판매량 그래프 생성"""
     current_year = datetime.now().year
     last_year = current_year - 1
@@ -801,6 +810,92 @@ def create_weekly_sales_chart(df, weekly_client_data=None):
             'barWidth': '60%'
         })
     
+    # 비교 상품 데이터 추가 (주별)
+    compare_series = None
+    if compare_df is not None and not compare_df.empty:
+        print(f"주별 그래프에 비교 상품 데이터 추가 - compare_df shape: {compare_df.shape}")
+        
+        # 비교 상품 데이터를 주별로 처리
+        compare_df_copy = compare_df.copy()
+        
+        # 날짜와 판매량 컬럼 찾기
+        date_col = None
+        sales_col = None
+        
+        for col in compare_df_copy.columns:
+            if any(keyword in str(col).lower() for keyword in ['거래일자', '판매일자', '날짜', 'date']):
+                date_col = col
+                break
+        
+        for col in compare_df_copy.columns:
+            if any(keyword in str(col).lower() for keyword in ['판매량', '실판매', '수량', 'quantity', 'sales']):
+                sales_col = col
+                break
+        
+        if date_col is None:
+            date_col = compare_df_copy.columns[0]
+        if sales_col is None:
+            for col in compare_df_copy.columns:
+                if col != date_col and pd.api.types.is_numeric_dtype(compare_df_copy[col]):
+                    sales_col = col
+                    break
+            if sales_col is None and len(compare_df_copy.columns) >= 2:
+                sales_col = compare_df_copy.columns[1]
+        
+        # 날짜 컬럼을 datetime으로 변환
+        compare_df_copy[date_col] = pd.to_datetime(compare_df_copy[date_col], errors='coerce')
+        
+        # 판매량 컬럼을 숫자로 변환
+        compare_df_copy[sales_col] = pd.to_numeric(compare_df_copy[sales_col], errors='coerce')
+        
+        # 유효한 데이터만 필터링
+        compare_df_copy = compare_df_copy.dropna(subset=[date_col, sales_col])
+        
+        # 현재 연도 데이터만 필터링
+        compare_df_copy = compare_df_copy[compare_df_copy[date_col].dt.year == current_year]
+        
+        if not compare_df_copy.empty:
+            # 주차 계산
+            compare_df_copy['주차'] = compare_df_copy[date_col].apply(calculate_calendar_week)
+            
+            # 주별 판매량 집계
+            weekly_compare = compare_df_copy.groupby('주차')[sales_col].sum().reset_index()
+            weekly_compare = weekly_compare.sort_values('주차')
+            
+            # 1-53주차에 매핑
+            compare_data_mapped = [None] * 53
+            for week, value in zip(weekly_compare['주차'].tolist(), weekly_compare[sales_col].tolist()):
+                if week in week_to_index:
+                    compare_data_mapped[week_to_index[week]] = float(value)
+            
+            # 데이터가 있는 주차들 사이만 연결
+            compare_data_mapped = interpolate_sales_data(compare_data_mapped)
+            
+            compare_series = {
+                'name': '비교상품 주별 판매량',
+                'type': 'line',
+                'data': compare_data_mapped,
+                'symbol': 'diamond',
+                'symbolSize': 6,
+                'lineStyle': {'width': 2, 'color': '#ff6b6b'},
+                'itemStyle': {'color': '#ff6b6b'},
+                'connectNulls': True
+            }
+    # 시리즈 순서 맞추기: 실판매(2025) 다음에 비교상품, 그 다음 실판매(2024)
+    def insert_compare_series(series_list, compare_series):
+        idx_2025 = next((i for i, s in enumerate(series_list) if s['name'].startswith('실판매(2025)')), None)
+        idx_2024 = next((i for i, s in enumerate(series_list) if s['name'].startswith('실판매(2024)')), None)
+        if compare_series and idx_2025 is not None:
+            insert_idx = idx_2025 + 1
+            # 만약 실판매(2024)가 바로 뒤에 있으면 그 앞에 삽입
+            if idx_2024 is not None and idx_2024 == insert_idx:
+                series_list.insert(insert_idx, compare_series)
+            else:
+                series_list.insert(insert_idx, compare_series)
+        elif compare_series:
+            series_list.append(compare_series)
+    insert_compare_series(series_list, compare_series)
+    
     # y축 설정 (거래처 수가 있으면 이중 y축 사용)
     y_axis_config = [
         {'type': 'value', 'name': '판매량', 'position': 'left'},
@@ -872,7 +967,9 @@ def create_weekly_sales_chart(df, weekly_client_data=None):
                 'selected': {
                     f'실판매({current_year})': True,
                     f'실판매({last_year})': True,
-                    '거래처 수': True,
+                    '거래처 수': False,
+                    '비교상품 판매량': False,
+                    '비교상품 주별 판매량': False,
                     f'저점 추세({last_year})': False,
                     f'고점 추세({last_year})': False,
                     f'중위 추세({last_year})': True,

@@ -261,34 +261,56 @@
             </div>
             <!-- 비교 상품 업로드 UI (상품별 페이지에서만 표시) -->
             {% if selected_product %}
-            <form
-              method="post"
-              enctype="multipart/form-data"
-              class="mb-6 flex items-center gap-4"
-              style="background: #f8fafc; border-radius: 0.5rem; padding: 1rem"
-            >
-              <label
-                for="compare_file"
-                class="text-sm font-semibold text-gray-700"
-                >비교 상품 엑셀 업로드</label
+            <div class="mb-6" style="background: #f8fafc; border-radius: 0.5rem; padding: 1rem">
+              <div class="flex items-center justify-between mb-2">
+                <label class="text-sm font-semibold text-gray-700">비교 상품 관리</label>
+                {% if compare_df is not none %}
+                <form method="post" class="inline">
+                  <button
+                    type="submit"
+                    name="delete_compare"
+                    value="1"
+                    class="btn btn-danger btn-sm"
+                    onclick="return confirm('비교 상품 데이터를 삭제하시겠습니까?')"
+                  >
+                    <i class="fas fa-trash"></i> 삭제
+                  </button>
+                </form>
+                {% endif %}
+              </div>
+              <form
+                method="post"
+                enctype="multipart/form-data"
+                class="flex items-center gap-4"
               >
-              <input
-                type="file"
-                name="compare_file"
-                id="compare_file"
-                accept=".xls,.xlsx"
-                class="form-control"
-                required
-              />
-              <button
-                type="submit"
-                name="compare_upload"
-                value="1"
-                class="btn btn-primary px-4"
-              >
-                업로드
-              </button>
-            </form>
+                <label
+                  for="compare_file"
+                  class="text-sm font-semibold text-gray-700"
+                  >비교 상품 엑셀 업로드</label
+                >
+                <input
+                  type="file"
+                  name="compare_file"
+                  id="compare_file"
+                  accept=".xls,.xlsx"
+                  class="form-control"
+                  required
+                />
+                <button
+                  type="submit"
+                  name="compare_upload"
+                  value="1"
+                  class="btn btn-primary px-4"
+                >
+                  업로드
+                </button>
+              </form>
+              {% if compare_df is not none %}
+              <div class="mt-2 text-sm text-green-600">
+                <i class="fas fa-check-circle"></i> 비교 상품 데이터가 저장되어 있습니다.
+              </div>
+              {% endif %}
+            </div>
             {% endif %}
             {% if plots.sales_trend %}
             <div class="mb-6">
