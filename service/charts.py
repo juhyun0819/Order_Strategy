@@ -297,7 +297,7 @@ def create_sales_trend_chart(df, only_product=False, all_dates=None, trend_windo
             'lineStyle': {'width': 2, 'color': '#ff6b6b'},
             'itemStyle': {'color': '#ff6b6b'},
             'connectNulls': True,
-            'yAxisIndex': 0
+            'yAxisIndex': 1
         })
     else:
         print("비교 데이터가 없습니다.")
@@ -419,6 +419,11 @@ def create_sales_trend_chart(df, only_product=False, all_dates=None, trend_windo
         if 0 <= today_idx < len(mid_trend):
             today_mid_trend = mid_trend[today_idx]
     
+    # 일별 그래프: y축 2개(왼쪽: 판매량/재고량, 오른쪽: 비교상품 판매량(숨김))
+    y_axis_config = [
+        {'type': 'value', 'name': '판매량/재고량', 'position': 'left'},
+        {'type': 'value', 'name': '비교상품 판매량', 'position': 'right', 'show': False, 'offset': 0}
+    ]
     return {
         'type': 'line',
         'title': '판매 트렌드',
@@ -452,7 +457,7 @@ def create_sales_trend_chart(df, only_product=False, all_dates=None, trend_windo
                 }
             },
             'xAxis': {'type': 'category', 'name': '월', 'data': dates},
-            'yAxis': {'type': 'value', 'name': '판매량/재고량'},
+            'yAxis': y_axis_config,
             'series': series,
             'dataZoom': [
                 {
@@ -772,7 +777,7 @@ def create_weekly_sales_chart(df, weekly_client_data=None, compare_df=None):
         series_list.append({
             'name': '거래처 수',
             'type': 'bar',
-            'yAxisIndex': 1,  # 두 번째 y축 사용
+            'yAxisIndex': 2,  # 세 번째 y축 사용
             'data': client_data_mapped,
             'itemStyle': {'color': '#ff6b6b'},
             'barWidth': '60%'
@@ -860,7 +865,7 @@ def create_weekly_sales_chart(df, weekly_client_data=None, compare_df=None):
                 'lineStyle': {'width': 2, 'color': '#ff6b6b'},
                 'itemStyle': {'color': '#ff6b6b'},
                 'connectNulls': True,
-                'yAxisIndex': 0
+                'yAxisIndex': 1
             }
     # 시리즈 순서 맞추기: 실판매(2025) 다음에 비교상품, 그 다음 실판매(2024)
     def insert_compare_series(series_list, compare_series):
@@ -877,19 +882,12 @@ def create_weekly_sales_chart(df, weekly_client_data=None, compare_df=None):
             series_list.append(compare_series)
     insert_compare_series(series_list, compare_series)
     
-    # y축 설정 (거래처 수가 있으면 이중 y축 사용)
+    # y축 설정 (3개)
     y_axis_config = [
-        {'type': 'value', 'name': '판매량', 'position': 'left'},
+        {'type': 'value', 'name': '판매량/재고량', 'position': 'left'},
+        {'type': 'value', 'name': '비교상품 판매량', 'position': 'right', 'show': False, 'offset': 0},
+        {'type': 'value', 'name': '거래처 수', 'position': 'right', 'show': True, 'offset': 60, 'axisLine': {'show': True, 'lineStyle': {'color': '#ff6b6b'}}, 'axisLabel': {'color': '#ff6b6b'}}
     ]
-    
-    if weekly_client_data:
-        y_axis_config.append({
-            'type': 'value', 
-            'name': '거래처 수', 
-            'position': 'right',
-            'axisLine': {'show': True, 'lineStyle': {'color': '#ff6b6b'}},
-            'axisLabel': {'color': '#ff6b6b'}
-        })
     
     # 추세선을 벗어나는 지점들을 알림용으로 수집
     trend_alerts = []
