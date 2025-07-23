@@ -40,6 +40,7 @@ def init_db():
             product_name TEXT NOT NULL,
             compare_data TEXT NOT NULL,
             upload_date TEXT,
+            filename TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
@@ -70,7 +71,7 @@ def save_to_db(df, upload_date, filename):
         df.to_sql('sales_data', conn, if_exists='append', index=False)
     conn.close()
 
-def save_compare_product(product_name, compare_df, upload_date):
+def save_compare_product(product_name, compare_df, upload_date, filename=None):
     """비교 상품 데이터를 데이터베이스에 저장"""
     import json
     conn = sqlite3.connect('inventory.db')
@@ -82,35 +83,35 @@ def save_compare_product(product_name, compare_df, upload_date):
     # 새로운 데이터 저장
     compare_data_json = compare_df.to_json(orient='records')
     cursor.execute('''
-        INSERT INTO compare_products (product_name, compare_data, upload_date)
-        VALUES (?, ?, ?)
-    ''', (product_name, compare_data_json, upload_date))
+        INSERT INTO compare_products (product_name, compare_data, upload_date, filename)
+        VALUES (?, ?, ?, ?)
+    ''', (product_name, compare_data_json, upload_date, filename))
     
     conn.commit()
     conn.close()
 
 def load_compare_product(product_name):
-    """특정 상품의 비교 상품 데이터를 데이터베이스에서 불러오기"""
+    """특정 상품의 비교 상품 데이터를 데이터베이스에서 불러오기 (파일명 포함)"""
     import json
     import pandas as pd
     conn = sqlite3.connect('inventory.db')
     cursor = conn.cursor()
     
-    cursor.execute('SELECT compare_data FROM compare_products WHERE product_name = ? ORDER BY created_at DESC LIMIT 1', (product_name,))
+    cursor.execute('SELECT compare_data, filename FROM compare_products WHERE product_name = ? ORDER BY created_at DESC LIMIT 1', (product_name,))
     result = cursor.fetchone()
     
     conn.close()
     
     if result:
         try:
-            compare_data_json = result[0]
+            compare_data_json, filename = result
             compare_df = pd.read_json(compare_data_json, orient='records')
-            return compare_df
+            return compare_df, filename
         except Exception as e:
             print(f"비교 상품 데이터 로드 중 오류: {e}")
-            return None
+            return None, None
     else:
-        return None
+        return None, None
 
 def delete_compare_product(product_name):
     """특정 상품의 비교 상품 데이터를 데이터베이스에서 삭제"""

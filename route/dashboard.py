@@ -55,36 +55,38 @@ def dashboard():
                 flash('올바른 숫자를 입력해주세요.', 'error')
         return redirect(url_for('dashboard.dashboard', product=selected_product, color=selected_color))
     
+    # 비교 상품 데이터 처리
     compare_df = None
+    compare_filename = None
+    
     if request.method == 'POST' and 'compare_upload' in request.form and selected_product:
         compare_file = request.files.get('compare_file')
         if compare_file and compare_file.filename.endswith(('xls', 'xlsx')):
             try:
                 compare_df = pd.read_excel(compare_file)
-                # 비교 상품 데이터를 DB에 저장
                 from service.db import save_compare_product
                 upload_date = datetime.now().strftime('%Y-%m-%d')
-                save_compare_product(selected_product, compare_df, upload_date)
+                save_compare_product(selected_product, compare_df, upload_date, filename=compare_file.filename)
                 flash(f'비교 상품 파일 {compare_file.filename} 업로드 완료! (상품: {selected_product})', 'success')
+                compare_filename = compare_file.filename
             except Exception as e:
                 flash(f'비교 상품 파일 처리 중 오류: {str(e)}', 'error')
-        # 아래에서 상세페이지 렌더링 (redirect 없이)
     elif request.method == 'POST' and 'delete_compare' in request.form and selected_product:
-        # 비교 상품 데이터 삭제
         from service.db import delete_compare_product
         delete_compare_product(selected_product)
         flash(f'비교 상품 데이터가 삭제되었습니다.', 'success')
         return redirect(url_for('dashboard.dashboard', product=selected_product, color=selected_color))
     elif selected_product:
-        # 상품별 페이지에서 기존 비교 상품 데이터 불러오기
-        from service.db import load_compare_product, check_compare_product_exists
-        print(f"상품별 페이지 - 선택된 상품: {selected_product}")
-        print(f"상품별 페이지 - 비교 상품 데이터 존재 여부: {check_compare_product_exists(selected_product)}")
-        compare_df = load_compare_product(selected_product)
-        print(f"상품별 페이지 - 로드된 비교 상품 데이터: {compare_df is not None}")
-        if compare_df is not None:
-            print(f"상품별 페이지 - 비교 상품 데이터 shape: {compare_df.shape}")
-            print(f"상품별 페이지 - 비교 상품 데이터 columns: {compare_df.columns.tolist()}")
+        from service.db import load_compare_product
+        result = load_compare_product(selected_product)
+        if result is not None:
+            compare_df, compare_filename = result
+            print(f"비교상품 데이터 로드 성공 - compare_df: {compare_df is not None}, compare_filename: {compare_filename}")
+            if compare_df is not None:
+                print(f"비교상품 데이터 shape: {compare_df.shape}, columns: {compare_df.columns.tolist()}")
+        else:
+            compare_df, compare_filename = None, None
+            print("비교상품 데이터 로드 실패 - result is None")
     elif request.method == 'POST':
         files = request.files.getlist('files')
         uploaded_count = 0
@@ -255,7 +257,8 @@ def dashboard():
         client_counts=client_counts,
         current_client_count=current_client_count,
         current_week_client_count=current_week_client_count,
-        compare_df=compare_df
+        compare_df=compare_df,
+        compare_filename=compare_filename
     )
 
 @dashboard_bp.route('/dashboard/plot')

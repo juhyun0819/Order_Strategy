@@ -950,7 +950,7 @@ def create_weekly_sales_chart(df, weekly_client_data=None, compare_df=None):
                     f'실판매({last_year})': True,
                     '거래처 수': False,
                     '비교상품 판매량': True,
-                    '비교상품 주별 판매량': False,
+                    '비교상품 주별 판매량': True,
                     f'저점 추세({last_year})': False,
                     f'고점 추세({last_year})': False,
                     f'중위 추세({last_year})': True,
@@ -1196,8 +1196,21 @@ def process_compare_data(compare_df, current_year):
             
             print(f"날짜 컬럼: {date_col}, 판매량 컬럼: {sales_col}")
             
-            # 날짜 컬럼을 datetime으로 변환
-            compare_df[date_col] = pd.to_datetime(compare_df[date_col], errors='coerce')
+            # 날짜 컬럼을 datetime으로 변환 (Unix timestamp 처리)
+            try:
+                # 먼저 일반적인 날짜 형식으로 시도
+                compare_df[date_col] = pd.to_datetime(compare_df[date_col], errors='coerce')
+                
+                # 변환된 날짜가 모두 NaT이거나 1970년 이전이면 Unix timestamp로 재시도
+                if compare_df[date_col].isna().all() or compare_df[date_col].dt.year.min() < 2000:
+                    print("Unix timestamp로 재변환 시도")
+                    compare_df[date_col] = pd.to_datetime(compare_df[date_col], unit='ms', errors='coerce')
+                
+                print(f"날짜 변환 후 샘플:\n{compare_df.head()}")
+                print(f"날짜 범위: {compare_df[date_col].min()} ~ {compare_df[date_col].max()}")
+            except Exception as e:
+                print(f"날짜 변환 중 오류: {e}")
+                return None
             
             # 판매량 컬럼을 숫자로 변환
             compare_df[sales_col] = pd.to_numeric(compare_df[sales_col], errors='coerce')
@@ -1209,13 +1222,14 @@ def process_compare_data(compare_df, current_year):
             
             print(f"유효 데이터 필터링 후 행 수: {len(compare_df)}")
             
-            # 현재 연도 데이터만 필터링
-            compare_df = compare_df[compare_df[date_col].dt.year == current_year]
-            
-            print(f"현재 연도 필터링 후 행 수: {len(compare_df)}")
+            # 년도 필터링 제거 - 모든 데이터 포함
+            print(f"전체 데이터 사용 - 행 수: {len(compare_df)}")
             
             if not compare_df.empty:
-                # 전체 연도 날짜 범위 생성
+                # 마지막 행(합계 행) 제외
+                compare_df = compare_df.iloc[:-1]
+                
+                # 전체 연도 날짜 범위 생성 (2025년)
                 full_date_range = pd.date_range(start=f'{current_year}-01-01', end=f'{current_year}-12-31', freq='D')
                 
                 # 날짜별 판매량 집계
@@ -1236,7 +1250,7 @@ def process_compare_data(compare_df, current_year):
                 
                 return compare_data
             else:
-                print("현재 연도에 유효한 데이터가 없습니다.")
+                print("유효한 데이터가 없습니다.")
         
         return None
     except Exception as e:
