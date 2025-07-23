@@ -259,6 +259,46 @@
                 </div>
               </div>
             </div>
+            <!-- 예측 및 발주 제안 카드 (오늘의 중위 추세선, 발주제안) -->
+            <div class="w-full mb-6">
+              <div class="bg-white rounded-lg p-4 flex flex-row items-stretch shadow border">
+                <!-- 예측값(중위 추세선) -->
+                <div class="flex-1 flex flex-col items-center justify-center pr-4 border-r">
+                  <div class="flex items-center mb-2">
+                    <div class="h-8 w-8 rounded-lg bg-yellow-100 flex items-center justify-center mr-2">
+                      <i class="fas fa-lightbulb text-yellow-500"></i>
+                    </div>
+                    <span class="text-sm font-semibold text-gray-700">예측값 (중위 추세선)</span>
+                  </div>
+                  <div class="text-2xl font-bold text-indigo-700 mb-2">
+                    {{ plots.today_mid_trend if plots.today_mid_trend is not none else '-' }}
+                  </div>
+                </div>
+                <!-- 발주 제안 -->
+                <div class="flex-1 flex flex-col items-center justify-center pl-4">
+                  <div class="flex items-center mb-2">
+                    <div class="h-8 w-8 rounded-lg bg-pink-100 flex items-center justify-center mr-2">
+                      <i class="fas fa-truck text-pink-500"></i>
+                    </div>
+                    <span class="text-sm font-semibold text-gray-700">발주 제안</span>
+                  </div>
+                  <div class="text-lg font-bold text-pink-700 mb-2">
+                    {%- set mid = plots.today_mid_trend if plots.today_mid_trend is not none else None -%}
+                    {%- set stock = stats.product_current_stock if stats.product_current_stock is not none else None -%}
+                    {%- if mid is not none and stock is not none -%}
+                      {%- set lack = (mid|float - stock|float)|round -%}
+                      {%- if lack > 0 -%}
+                        {{ lack }}개 발주 필요
+                      {%- else -%}
+                        충분
+                      {%- endif -%}
+                    {%- else -%}
+                      -
+                    {%- endif -%}
+                  </div>
+                </div>
+              </div>
+            </div>
             <!-- 비교 상품 업로드 UI (상품별 페이지에서만 표시) -->
             {% if selected_product %}
             <div class="mb-6" style="background: #f8fafc; border-radius: 0.5rem; padding: 1rem">

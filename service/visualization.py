@@ -18,6 +18,24 @@ def create_visualizations(df, only_product=False, all_dates=None, trend_window=7
     sales_trend = create_sales_trend_chart(df, only_product, all_dates, trend_window, trend_frac, compare_df)
     if sales_trend:
         charts['sales_trend'] = sales_trend
+        # 오늘의 중위 추세선 값 추가
+        if 'data' in sales_trend and 'today_mid_trend' in sales_trend['data']:
+            charts['today_mid_trend'] = sales_trend['data']['today_mid_trend']
+    
+    # 오늘의 발주제안 계산 (상품-컬러 상세 페이지에서만)
+    if only_product and not df.empty:
+        from service.analysis import generate_inventory_alerts
+        # 가장 최근 날짜의 데이터만 사용
+        df['판매일자'] = pd.to_datetime(df['판매일자'])
+        last_date = df['판매일자'].max()
+        today_df = df[df['판매일자'] == last_date]
+        # 상품-컬러별로 발주제안 계산
+        alert_rows = generate_inventory_alerts(today_df)
+        # 상품-컬러별로 today_order_suggestion을 charts에 추가 (여러개면 첫번째만)
+        if alert_rows:
+            charts['today_order_suggestion'] = alert_rows[0].get('발주제안', None)
+        else:
+            charts['today_order_suggestion'] = None
     
     # 2. 주별 판매량 그래프 (상품별 상세 페이지에서만)
     if only_product:

@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 from datetime import timedelta
+from service.trend_calculator import TrendCalculator  # 추가
 
 def pareto_analysis(df):
     """파레토 분석 - 상위 20% 상품 추출"""
@@ -97,30 +98,35 @@ def recent_7days_analysis(df):
     
     return daily_sales, day_sales
 
-def generate_inventory_alerts(df):
-    """재고 알림 생성"""
+def generate_inventory_alerts(df, pareto_color_products=None):
+    """재고 알림 생성 (파레토 상품-컬러만)"""
     alert_rows = []
     plot_products = []
-    
-    for prod in df['품명'].unique():
-        sub = df[df['품명'] == prod].sort_values('판매일자')
+    trend_calculator = TrendCalculator(window=7, frac=0.2)  # LOWESS 기반 중간선 계산기
+
+    # 파레토 상품-컬러 튜플만 필터링
+    if pareto_color_products is not None:
+        filter_mask = df.apply(lambda row: (row['품명'], row['칼라']) in pareto_color_products, axis=1)
+        df = df[filter_mask]
+
+    for (prod, color) in df[['품명', '칼라']].drop_duplicates().itertuples(index=False):
+        sub = df[(df['품명'] == prod) & (df['칼라'] == color)].sort_values('판매일자')
         if len(sub) >= 2:
             sales = sub['실판매'].astype(float).values
             if np.ptp(sales) > 0:
-                plot_products.append(prod)
-    
-    for prod in plot_products:
-        sub = df[df['품명'] == prod].sort_values('판매일자')
+                plot_products.append((prod, color))
+
+    for (prod, color) in plot_products:
+        sub = df[(df['품명'] == prod) & (df['칼라'] == color)].sort_values('판매일자')
         if sub.empty or '실판매' not in sub.columns or '현재고' not in sub.columns:
             continue
         sales = sub['실판매'].astype(float).values
         if len(sales) < 2:
             continue
         x = np.arange(len(sales))
-        high_trend = np.poly1d(np.polyfit(x, pd.Series(sales).rolling(7, min_periods=1).max(), 1))(x)
-        low_trend = np.poly1d(np.polyfit(x, pd.Series(sales).rolling(7, min_periods=1).min(), 1))(x)
-        mid_trend = (high_trend + low_trend) / 2
-        mid_pred = float(mid_trend[-1])
+        # LOWESS 기반 중간선 계산
+        mid_trend_arr = trend_calculator.mid_trend(sales)
+        mid_pred = float(mid_trend_arr[-1]) if len(mid_trend_arr) > 0 else 0
         cur_stock = sub['현재고'].iloc[-1]
         try:
             cur_stock = float(cur_stock)
@@ -155,7 +161,9 @@ def generate_inventory_alerts(df):
             alert_level = '안정'
         alert_rows.append({
             '날짜': str(last_date.date()),
-            '상품명': prod,
+            '상품명': f"{prod} - {color}",
+            '품명': prod,
+            '칼라': color,
             '최근 판매 경향': trend,
             '중간선': int(round(mid_pred)),
             '현재고': int(round(cur_stock)),
@@ -272,9 +280,9 @@ def get_pareto_products_by_category_current_year(df):
         'colors': color_pareto
     }
 
-def get_product_stats(df, product_name):
+def get_product_stats(df, product_name, color_name=None):
     """
-    선택된 상품의 누적 판매량, 현재고(가장 최근 날짜), 최근 7일 판매량을 반환
+    선택된 상품(및 선택된 컬러)의 누적 판매량, 현재고(가장 최근 날짜), 최근 7일 판매량을 반환
     """
     if df.empty or product_name not in df['품명'].unique():
         return {
@@ -282,15 +290,18 @@ def get_product_stats(df, product_name):
             'product_current_stock': 0,
             'product_7days_sales': 0
         }
-    product_df = df[df['품명'] == product_name].copy()
+    if color_name:
+        product_df = df[(df['품명'] == product_name) & (df['칼라'] == color_name)].copy()
+    else:
+        product_df = df[df['품명'] == product_name].copy()
     # 누적 판매량
     total_sales = product_df['실판매'].sum()
     # 날짜 컬럼 변환
     product_df['판매일자'] = pd.to_datetime(product_df['판매일자'])
-    # 현재고: 가장 최근 날짜의 재고
+    # 현재고: 가장 최근 날짜의 모든 행의 현재고 합산
     latest_date = product_df['판매일자'].max()
-    latest_row = product_df[product_df['판매일자'] == latest_date]
-    current_stock = latest_row['현재고'].iloc[0] if not latest_row.empty else 0
+    latest_rows = product_df[product_df['판매일자'] == latest_date]
+    current_stock = latest_rows['현재고'].sum() if not latest_rows.empty else 0
     # 최근 7일 판매량
     last_7_days = latest_date - pd.Timedelta(days=6)
     sales_7days = product_df[product_df['판매일자'] >= last_7_days]['실판매'].sum()

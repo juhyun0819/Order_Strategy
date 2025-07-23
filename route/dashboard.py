@@ -146,7 +146,10 @@ def dashboard():
             'sales_dates': filtered_df['판매일자'].nunique()
         }
         # 상품별 통계 추가
-        stats.update(get_product_stats(df, selected_product))
+        if selected_color:
+            stats.update(get_product_stats(df, selected_product, selected_color))
+        else:
+            stats.update(get_product_stats(df, selected_product))
         
         # 주차별 거래처 수 데이터 가져오기
         current_year = datetime.now().year
@@ -204,7 +207,12 @@ def dashboard():
                             alert['message'] = f"[{product}] {alert['message']}"
                         trend_alerts.extend(product_alerts)
         
-        alert_rows = generate_inventory_alerts(df)
+        # 파레토 컬러 상품-컬러 리스트 추출
+        pareto_color_products = []
+        if not filtered_df.empty:
+            from service.analysis import color_pareto_analysis_current_year
+            pareto_color_products = color_pareto_analysis_current_year(filtered_df)
+        alert_rows = generate_inventory_alerts(filtered_df, pareto_color_products=pareto_color_products)
         alert_df = pd.DataFrame(alert_rows) if alert_rows else None
         a_grade_alert_rows = generate_a_grade_alerts(df)
         a_grade_alert_df = pd.DataFrame(a_grade_alert_rows) if a_grade_alert_rows else None

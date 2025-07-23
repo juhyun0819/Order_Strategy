@@ -410,6 +410,15 @@ def create_sales_trend_chart(df, only_product=False, all_dates=None, trend_windo
             }
         ])
     
+    # 오늘 날짜의 중위 추세선 값 계산
+    today = pd.Timestamp(datetime.today().date())
+    full_date_range = pd.date_range(start=f'{current_year}-01-01', end=f'{current_year}-12-31', freq='D')
+    today_mid_trend = None
+    if today in full_date_range:
+        today_idx = (today - full_date_range[0]).days
+        if 0 <= today_idx < len(mid_trend):
+            today_mid_trend = mid_trend[today_idx]
+    
     return {
         'type': 'line',
         'title': '판매 트렌드',
@@ -420,7 +429,8 @@ def create_sales_trend_chart(df, only_product=False, all_dates=None, trend_windo
                 'low': safe_list(trend_data['low']),
                 'high': safe_list(trend_data['high']),
                 'mid': safe_list(trend_data['mid'])
-            }
+            },
+            'today_mid_trend': today_mid_trend
         },
         'config': {
             'legend': {
@@ -429,7 +439,7 @@ def create_sales_trend_chart(df, only_product=False, all_dates=None, trend_windo
                 'data': [s['name'] for s in series],  # legend에 시리즈 이름 명시적으로 추가
                 'selected': {
                     f'실판매({current_year})': True,
-                    '비교상품 판매량': False,
+                    '비교상품 판매량': True,
                     f'실판매({last_year})': True if only_product and trend_last_year else True,
                     '현재고': False if only_product else True,
                     '미송잔량': False if only_product else True,
@@ -941,7 +951,7 @@ def create_weekly_sales_chart(df, weekly_client_data=None, compare_df=None):
                     f'실판매({current_year})': True,
                     f'실판매({last_year})': True,
                     '거래처 수': False,
-                    '비교상품 판매량': False,
+                    '비교상품 판매량': True,
                     '비교상품 주별 판매량': False,
                     f'저점 추세({last_year})': False,
                     f'고점 추세({last_year})': False,
