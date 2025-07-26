@@ -163,7 +163,9 @@ def dashboard():
         # 추세선 알림 데이터 추출
         trend_alerts = []
         if plots and 'weekly_sales_trend' in plots and plots['weekly_sales_trend']:
-            trend_alerts = plots['weekly_sales_trend'].get('data', {}).get('trend_alerts', [])
+            weekly_data = plots['weekly_sales_trend']
+            if isinstance(weekly_data, dict) and 'data' in weekly_data:
+                trend_alerts = weekly_data.get('data', {}).get('trend_alerts', [])
         
         alert_df = None
         a_grade_alert_df = None

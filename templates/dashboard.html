@@ -353,8 +353,19 @@
             <script>
               document.addEventListener('DOMContentLoaded', function() {
                   // 주차별 날짜 범위 정보를 window에 할당
-                  window.weekDateRanges = {{ plots.weekly_sales_trend.data.week_date_ranges|tojson }};
-                  var option_weekly_sales_trend = {{ plots.weekly_sales_trend.config|tojson }};
+                  var weekDateRanges = {};
+                  var option_weekly_sales_trend = {};
+                  
+                  {% if plots and plots.weekly_sales_trend %}
+                  {% if plots.weekly_sales_trend.data %}
+                  weekDateRanges = {{ plots.weekly_sales_trend.data.week_date_ranges|tojson }};
+                  {% endif %}
+                  {% if plots.weekly_sales_trend.config %}
+                  option_weekly_sales_trend = {{ plots.weekly_sales_trend.config|tojson }};
+                  {% endif %}
+                  {% endif %}
+                  
+                  window.weekDateRanges = weekDateRanges;
                   option_weekly_sales_trend.title = undefined;
                   option_weekly_sales_trend.tooltip = {
                       trigger: 'axis',

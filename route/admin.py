@@ -1,5 +1,5 @@
 from flask import Blueprint, request, redirect, url_for, flash
-from service.db import delete_by_date, reset_db
+from service.db import delete_by_date, reset_db, reset_compare_products
 
 admin_bp = Blueprint('admin', __name__)
 
@@ -21,4 +21,13 @@ def reset_database():
         flash('데이터베이스가 성공적으로 초기화되었습니다.', 'success')
     except Exception as e:
         flash(f'데이터베이스 초기화 중 오류가 발생했습니다: {str(e)}', 'error')
+    return redirect(url_for('dashboard.dashboard'))
+
+@admin_bp.route('/reset-compare-products')
+def reset_compare_products_route():
+    try:
+        deleted_count = reset_compare_products()
+        flash(f'비교 상품 데이터 {deleted_count}개가 성공적으로 삭제되었습니다. 다시 업로드해주세요.', 'success')
+    except Exception as e:
+        flash(f'비교 상품 데이터 삭제 중 오류가 발생했습니다: {str(e)}', 'error')
     return redirect(url_for('dashboard.dashboard')) 

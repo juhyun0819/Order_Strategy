@@ -26,9 +26,10 @@ def create_visualizations(df, only_product=False, all_dates=None, trend_window=7
     if only_product and not df.empty:
         from service.analysis import generate_inventory_alerts
         # 가장 최근 날짜의 데이터만 사용
-        df['판매일자'] = pd.to_datetime(df['판매일자'])
-        last_date = df['판매일자'].max()
-        today_df = df[df['판매일자'] == last_date]
+        df_copy = df.copy()
+        df_copy['판매일자'] = pd.to_datetime(df_copy['판매일자'])
+        last_date = df_copy['판매일자'].max()
+        today_df = df_copy[df_copy['판매일자'] == last_date]
         # 상품-컬러별로 발주제안 계산
         alert_rows = generate_inventory_alerts(today_df)
         # 상품-컬러별로 today_order_suggestion을 charts에 추가 (여러개면 첫번째만)

@@ -510,8 +510,9 @@ def create_weekly_sales_chart(df, weekly_client_data=None, compare_df=None):
     weekly_sales_last = None
     if not df_last_year.empty:
         # 전년도 주차 계산 (올해와 동일한 방식)
-        df_last_year['주차'] = df_last_year['판매일자'].apply(calculate_calendar_week)
-        weekly_sales_last = df_last_year.groupby('주차')['실판매'].sum().reset_index()
+        df_last_year_copy = df_last_year.copy()
+        df_last_year_copy['주차'] = df_last_year_copy['판매일자'].apply(calculate_calendar_week)
+        weekly_sales_last = df_last_year_copy.groupby('주차')['실판매'].sum().reset_index()
         weekly_sales_last = weekly_sales_last.sort_values('주차')
         last_year_values = weekly_sales_last['실판매'].tolist()
         
@@ -526,8 +527,9 @@ def create_weekly_sales_chart(df, weekly_client_data=None, compare_df=None):
     # 올해 데이터 처리
     if has_current_year_data:
         # 실제 달력 기준 주차 계산
-        df_current_year['주차'] = df_current_year['판매일자'].apply(calculate_calendar_week)
-        weekly_sales = df_current_year.groupby('주차')['실판매'].sum().reset_index()
+        df_current_year_copy = df_current_year.copy()
+        df_current_year_copy['주차'] = df_current_year_copy['판매일자'].apply(calculate_calendar_week)
+        weekly_sales = df_current_year_copy.groupby('주차')['실판매'].sum().reset_index()
         weekly_sales = weekly_sales.sort_values('주차')
         current_values = weekly_sales['실판매'].tolist()
         
@@ -815,58 +817,88 @@ def create_weekly_sales_chart(df, weekly_client_data=None, compare_df=None):
             if sales_col is None and len(compare_df_copy.columns) >= 2:
                 sales_col = compare_df_copy.columns[1]
         
-        # 날짜 컬럼을 datetime으로 변환
-        compare_df_copy[date_col] = pd.to_datetime(compare_df_copy[date_col], errors='coerce')
-        
-        # 판매량 컬럼을 숫자로 변환
-        compare_df_copy[sales_col] = pd.to_numeric(compare_df_copy[sales_col], errors='coerce')
-        
-        # 유효한 데이터만 필터링
-        compare_df_copy = compare_df_copy.dropna(subset=[date_col, sales_col])
-        
-        # 현재 연도 데이터만 필터링
-        compare_df_copy = compare_df_copy[compare_df_copy[date_col].dt.year == current_year]
-        
-        if not compare_df_copy.empty:
-            # 주차 계산
-            compare_df_copy['주차'] = compare_df_copy[date_col].apply(calculate_calendar_week)
+        # 날짜 컬럼을 datetime으로 변환 (Unix timestamp 처리 포함)
+        try:
+            print(f"주별 그래프 - 날짜 변환 전 샘플: {compare_df_copy[date_col].head().tolist()}")
             
-            # 주별 판매량 집계
-            weekly_compare = compare_df_copy.groupby('주차')[sales_col].sum().reset_index()
-            weekly_compare = weekly_compare.sort_values('주차')
+            # 먼저 일반적인 날짜 형식으로 시도
+            compare_df_copy[date_col] = pd.to_datetime(compare_df_copy[date_col], errors='coerce')
             
-            # 1-53주차에 매핑
-            compare_data_mapped = [None] * 53
-            for week, value in zip(weekly_compare['주차'].tolist(), weekly_compare[sales_col].tolist()):
-                if week in week_to_index:
-                    compare_data_mapped[week_to_index[week]] = float(value)
+            # 변환된 날짜가 모두 NaT이거나 1970년 이전이면 Unix timestamp로 재시도
+            if compare_df_copy[date_col].isna().all() or compare_df_copy[date_col].dt.year.min() < 2000:
+                print("Unix timestamp로 재변환 시도")
+                # 원본 데이터로 다시 시도
+                original_dates = compare_df_copy[date_col].copy()
+                compare_df_copy[date_col] = pd.to_datetime(original_dates, unit='ms', errors='coerce')
+                
+                # 여전히 문제가 있으면 다른 단위들도 시도
+                if compare_df_copy[date_col].isna().all() or compare_df_copy[date_col].dt.year.min() < 2000:
+                    print("마이크로초 단위로 시도")
+                    compare_df_copy[date_col] = pd.to_datetime(original_dates, unit='us', errors='coerce')
+                
+                if compare_df_copy[date_col].isna().all() or compare_df_copy[date_col].dt.year.min() < 2000:
+                    print("나노초 단위로 시도")
+                    compare_df_copy[date_col] = pd.to_datetime(original_dates, unit='ns', errors='coerce')
             
-            # 데이터가 있는 주차들 사이만 연결
-            compare_data_mapped = interpolate_sales_data(compare_data_mapped)
+            print(f"날짜 변환 후 샘플:\n{compare_df_copy.head()}")
+            print(f"날짜 범위: {compare_df_copy[date_col].min()} ~ {compare_df_copy[date_col].max()}")
             
-            df['판매일자'] = pd.to_datetime(df['판매일자'])
-            max_my_this = df[df['판매일자'].dt.year == current_year]['실판매'].max()
-            max_my_last = df[df['판매일자'].dt.year == last_year]['실판매'].max()
-            max_my = max(max_my_this if not pd.isna(max_my_this) else 0,
-                        max_my_last if not pd.isna(max_my_last) else 0,
-                        1)
-            max_compare = max([v for v in compare_data_mapped if v is not None], default=1)
-            normalized_compare = [
-                {'value': (v * max_my / max_compare) if (v is not None and max_compare) else None, 'original': v}
-                if v is not None else None
-                for v in compare_data_mapped
-            ]
-            compare_series = {
-                'name': '비교상품 주별 판매량',
-                'type': 'line',
-                'data': normalized_compare,
-                'symbol': 'diamond',
-                'symbolSize': 6,
-                'lineStyle': {'width': 2, 'color': '#ff6b6b'},
-                'itemStyle': {'color': '#ff6b6b'},
-                'connectNulls': True,
-                'yAxisIndex': 1
-            }
+            # 1970년 이하의 날짜가 있으면 경고
+            if compare_df_copy[date_col].dt.year.min() < 2000:
+                print(f"⚠️ 경고: 1970년대 날짜 발견 - 최소 연도: {compare_df_copy[date_col].dt.year.min()}")
+                
+        except Exception as e:
+            print(f"날짜 변환 중 오류: {e}")
+            compare_series = None
+        else:
+            # 판매량 컬럼을 숫자로 변환
+            compare_df_copy[sales_col] = pd.to_numeric(compare_df_copy[sales_col], errors='coerce')
+            
+            # 유효한 데이터만 필터링
+            compare_df_copy = compare_df_copy.dropna(subset=[date_col, sales_col])
+            
+            print(f"유효 데이터 필터링 후 행 수: {len(compare_df_copy)}")
+            
+            # 년도 필터링 제거 - 모든 데이터 포함
+            print(f"전체 데이터 사용 - 행 수: {len(compare_df_copy)}")
+            
+            if not compare_df_copy.empty:
+                # 마지막 행(합계 행) 제거 - 무조건 제거
+                print(f"마지막 행 제거 전 행 수: {len(compare_df_copy)}")
+                print(f"마지막 행 데이터: {compare_df_copy.iloc[-1].to_dict()}")
+                compare_df_copy = compare_df_copy.iloc[:-1]
+                print(f"마지막 행 제거 후 행 수: {len(compare_df_copy)}")
+                
+                # 주차 계산
+                compare_df_copy['주차'] = compare_df_copy[date_col].apply(calculate_calendar_week)
+                
+                # 주별 판매량 집계
+                weekly_compare = compare_df_copy.groupby('주차')[sales_col].sum().reset_index()
+                weekly_compare = weekly_compare.sort_values('주차')
+                
+                print(f"비교 데이터 주별 집계 결과: {len(weekly_compare)}개 주차")
+                print(f"주차 범위: {weekly_compare['주차'].min()} ~ {weekly_compare['주차'].max()}")
+                
+                # 1-53주차에 매핑
+                compare_data_mapped = [None] * 53
+                for week, value in zip(weekly_compare['주차'].tolist(), weekly_compare[sales_col].tolist()):
+                    if week in week_to_index:
+                        compare_data_mapped[week_to_index[week]] = float(value)
+                
+                # 데이터가 있는 주차들 사이만 연결
+                compare_data_mapped = interpolate_sales_data(compare_data_mapped)
+                
+                compare_series = {
+                    'name': '비교상품 주별 판매량',
+                    'type': 'line',
+                    'data': compare_data_mapped,
+                    'symbol': 'diamond',
+                    'symbolSize': 6,
+                    'lineStyle': {'width': 2, 'color': '#ff6b6b'},
+                    'itemStyle': {'color': '#ff6b6b'},
+                    'connectNulls': True,
+                    'yAxisIndex': 1
+                }
     # 시리즈 순서 맞추기: 실판매(2025) 다음에 비교상품, 그 다음 실판매(2024)
     def insert_compare_series(series_list, compare_series):
         idx_2025 = next((i for i, s in enumerate(series_list) if s['name'].startswith('실판매(2025)')), None)
@@ -1198,24 +1230,40 @@ def process_compare_data(compare_df, current_year):
             
             # 날짜 컬럼을 datetime으로 변환 (Unix timestamp 처리)
             try:
+                print(f"일별 그래프 - 날짜 변환 전 샘플: {compare_df[date_col].head().tolist()}")
+                
                 # 먼저 일반적인 날짜 형식으로 시도
                 compare_df[date_col] = pd.to_datetime(compare_df[date_col], errors='coerce')
                 
                 # 변환된 날짜가 모두 NaT이거나 1970년 이전이면 Unix timestamp로 재시도
                 if compare_df[date_col].isna().all() or compare_df[date_col].dt.year.min() < 2000:
                     print("Unix timestamp로 재변환 시도")
-                    compare_df[date_col] = pd.to_datetime(compare_df[date_col], unit='ms', errors='coerce')
+                    # 원본 데이터로 다시 시도
+                    original_dates = compare_df[date_col].copy()
+                    compare_df[date_col] = pd.to_datetime(original_dates, unit='ms', errors='coerce')
+                    
+                    # 여전히 문제가 있으면 다른 단위들도 시도
+                    if compare_df[date_col].isna().all() or compare_df[date_col].dt.year.min() < 2000:
+                        print("마이크로초 단위로 시도")
+                        compare_df[date_col] = pd.to_datetime(original_dates, unit='us', errors='coerce')
+                    
+                    if compare_df[date_col].isna().all() or compare_df[date_col].dt.year.min() < 2000:
+                        print("나노초 단위로 시도")
+                        compare_df[date_col] = pd.to_datetime(original_dates, unit='ns', errors='coerce')
                 
                 print(f"날짜 변환 후 샘플:\n{compare_df.head()}")
                 print(f"날짜 범위: {compare_df[date_col].min()} ~ {compare_df[date_col].max()}")
+                
+                # 1970년 이하의 날짜가 있으면 경고
+                if compare_df[date_col].dt.year.min() < 2000:
+                    print(f"⚠️ 경고: 1970년대 날짜 발견 - 최소 연도: {compare_df[date_col].dt.year.min()}")
+                    
             except Exception as e:
                 print(f"날짜 변환 중 오류: {e}")
                 return None
             
             # 판매량 컬럼을 숫자로 변환
             compare_df[sales_col] = pd.to_numeric(compare_df[sales_col], errors='coerce')
-            
-            print(f"날짜 변환 후 샘플:\n{compare_df.head()}")
             
             # 유효한 데이터만 필터링
             compare_df = compare_df.dropna(subset=[date_col, sales_col])
@@ -1226,21 +1274,42 @@ def process_compare_data(compare_df, current_year):
             print(f"전체 데이터 사용 - 행 수: {len(compare_df)}")
             
             if not compare_df.empty:
-                # 마지막 행(합계 행) 제외
+                # 마지막 행(합계 행) 제거 - 무조건 제거
+                print(f"마지막 행 제거 전 행 수: {len(compare_df)}")
+                print(f"마지막 행 데이터: {compare_df.iloc[-1].to_dict()}")
                 compare_df = compare_df.iloc[:-1]
+                print(f"마지막 행 제거 후 행 수: {len(compare_df)}")
                 
-                # 전체 연도 날짜 범위 생성 (2025년)
+                # 2025년 전체 날짜 범위 사용 (고정)
                 full_date_range = pd.date_range(start=f'{current_year}-01-01', end=f'{current_year}-12-31', freq='D')
                 
                 # 날짜별 판매량 집계
                 daily_compare = compare_df.groupby(date_col)[sales_col].sum()
-                daily_compare = daily_compare.reindex(full_date_range)
+                print(f"날짜별 집계 결과: {len(daily_compare)}개 날짜")
+                print(f"날짜별 집계 샘플: {daily_compare.head()}")
                 
-                print(f"날짜별 집계 후 데이터 수: {len(daily_compare)}")
-                print(f"판매량이 있는 날짜 수: {daily_compare.notna().sum()}")
+                # 2025년 날짜 범위에 맞춰서 데이터 매핑
+                # 비교 데이터의 월/일을 2025년의 해당 월/일로 매핑
+                compare_data = [None] * len(full_date_range)
                 
-                # 판매량 데이터 생성
-                compare_data = [float(v) if v is not None and not pd.isna(v) else None for v in daily_compare.values]
+                mapped_count = 0
+                for date, value in daily_compare.items():
+                    # 비교 데이터의 월/일을 2025년의 해당 월/일로 변환
+                    month_mask = full_date_range.month == date.month
+                    day_mask = full_date_range.day == date.day
+                    combined_mask = month_mask & day_mask
+                    
+                    if combined_mask.any():
+                        # True 값의 인덱스 찾기
+                        target_indices = full_date_range[combined_mask]
+                        if len(target_indices) > 0:
+                            target_idx = full_date_range.get_loc(target_indices[0])
+                            compare_data[target_idx] = float(value)
+                            mapped_count += 1
+                
+                print(f"매핑된 데이터 수: {mapped_count}")
+                print(f"날짜별 집계 후 데이터 수: {len(compare_data)}")
+                print(f"판매량이 있는 날짜 수: {len([v for v in compare_data if v is not None])}")
                 
                 # None이 아닌 값이 있는지 확인
                 valid_values = [v for v in compare_data if v is not None]
@@ -1249,10 +1318,6 @@ def process_compare_data(compare_df, current_year):
                     print(f"판매량 범위: {min(valid_values)} ~ {max(valid_values)}")
                 
                 return compare_data
-            else:
-                print("유효한 데이터가 없습니다.")
-        
-        return None
     except Exception as e:
         print(f"비교 데이터 처리 중 오류: {e}")
         import traceback

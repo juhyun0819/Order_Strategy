@@ -74,11 +74,51 @@ def save_to_db(df, upload_date, filename):
 def save_compare_product(product_name, compare_df, upload_date, filename=None):
     """비교 상품 데이터를 데이터베이스에 저장"""
     import json
+    import pandas as pd
     conn = sqlite3.connect('inventory.db')
     cursor = conn.cursor()
     
     # 기존 데이터가 있으면 삭제
     cursor.execute('DELETE FROM compare_products WHERE product_name = ?', (product_name,))
+    
+    # 날짜 컬럼 찾기
+    date_col = None
+    for col in compare_df.columns:
+        if any(keyword in str(col).lower() for keyword in ['거래일자', '판매일자', '날짜', 'date']):
+            date_col = col
+            break
+    
+    if date_col:
+        print(f"저장 전 날짜 컬럼 '{date_col}' 샘플: {compare_df[date_col].head().tolist()}")
+        
+        # 날짜를 올바른 형태로 변환
+        try:
+            # 먼저 일반적인 날짜 형식으로 시도
+            compare_df[date_col] = pd.to_datetime(compare_df[date_col], errors='coerce')
+            
+            # 변환된 날짜가 모두 NaT이거나 1970년 이전이면 Unix timestamp로 재시도
+            if compare_df[date_col].isna().all() or compare_df[date_col].dt.year.min() < 2000:
+                print("저장 시 Unix timestamp로 변환 시도")
+                # 원본 데이터로 다시 시도
+                original_dates = compare_df[date_col].copy()
+                compare_df[date_col] = pd.to_datetime(original_dates, unit='ms', errors='coerce')
+                
+                # 여전히 문제가 있으면 다른 단위들도 시도
+                if compare_df[date_col].isna().all() or compare_df[date_col].dt.year.min() < 2000:
+                    print("저장 시 마이크로초 단위로 시도")
+                    compare_df[date_col] = pd.to_datetime(original_dates, unit='us', errors='coerce')
+                
+                if compare_df[date_col].isna().all() or compare_df[date_col].dt.year.min() < 2000:
+                    print("저장 시 나노초 단위로 시도")
+                    compare_df[date_col] = pd.to_datetime(original_dates, unit='ns', errors='coerce')
+            
+            # 날짜를 ISO 형식 문자열로 변환하여 저장
+            compare_df[date_col] = compare_df[date_col].dt.strftime('%Y-%m-%d')
+            
+            print(f"저장 시 변환된 날짜 샘플: {compare_df[date_col].head().tolist()}")
+            
+        except Exception as e:
+            print(f"저장 시 날짜 변환 중 오류: {e}")
     
     # 새로운 데이터 저장
     compare_data_json = compare_df.to_json(orient='records')
@@ -105,7 +145,17 @@ def load_compare_product(product_name):
     if result:
         try:
             compare_data_json, filename = result
-            compare_df = pd.read_json(compare_data_json, orient='records')
+            from io import StringIO
+            compare_df = pd.read_json(StringIO(compare_data_json), orient='records')
+            
+            # 날짜 컬럼 확인 (이미 올바른 형태로 저장되어 있음)
+            date_cols = [col for col in compare_df.columns if any(keyword in str(col).lower() for keyword in ['거래일자', '판매일자', '날짜', 'date'])]
+            if date_cols:
+                print(f"로드 후 날짜 컬럼 '{date_cols[0]}' 샘플: {compare_df[date_cols[0]].head().tolist()}")
+                # 이미 문자열 형태로 저장되어 있으므로 바로 datetime으로 변환
+                compare_df[date_cols[0]] = pd.to_datetime(compare_df[date_cols[0]], errors='coerce')
+                print(f"날짜 변환 후 샘플: {compare_df[date_cols[0]].head().tolist()}")
+            
             return compare_df, filename
         except Exception as e:
             print(f"비교 상품 데이터 로드 중 오류: {e}")
@@ -238,3 +288,17 @@ def get_current_week_client_count(product):
     conn.close()
     
     return result[0] if result else None 
+
+def reset_compare_products():
+    """모든 비교 상품 데이터를 삭제 (잘못된 날짜 형태 데이터 정리용)"""
+    conn = sqlite3.connect('inventory.db')
+    cursor = conn.cursor()
+    
+    cursor.execute('DELETE FROM compare_products')
+    deleted_count = cursor.rowcount
+    
+    conn.commit()
+    conn.close()
+    
+    print(f"모든 비교 상품 데이터 삭제 완료: {deleted_count}개")
+    return deleted_count 
