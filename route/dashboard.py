@@ -230,7 +230,8 @@ def dashboard():
     # unique_dates 계산 (날짜별 데이터 삭제용)
     unique_dates = []
     if not df.empty:
-        unique_dates = sorted(df['판매일자'].unique())
+        # datetime 객체를 문자열로 변환
+        unique_dates = sorted(df['판매일자'].dt.strftime('%Y-%m-%d').unique())
     
     # 상품별/컬러별 파레토 상품 가져오기 (올해 기준)
     pareto_data = get_pareto_products_by_category_current_year(df) if not df.empty else {'products': [], 'colors': []}

@@ -195,8 +195,17 @@ def delete_by_date(date):
     """특정 날짜의 데이터 삭제"""
     conn = sqlite3.connect('inventory.db')
     cursor = conn.cursor()
+    
+    # 디버깅: 현재 데이터베이스에 있는 날짜들 확인
+    cursor.execute("SELECT DISTINCT 판매일자 FROM sales_data")
+    existing_dates = [row[0] for row in cursor.fetchall()]
+    print(f"삭제 요청 날짜: {date}")
+    print(f"데이터베이스에 있는 날짜들: {existing_dates}")
+    
     cursor.execute("DELETE FROM sales_data WHERE 판매일자 = ?", (date,))
     deleted_count = cursor.rowcount
+    print(f"삭제된 행 수: {deleted_count}")
+    
     conn.commit()
     conn.close()
     return deleted_count 
