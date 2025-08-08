@@ -45,6 +45,20 @@ def init_db():
         )
     ''')
     
+    # 파레토 선택 기준 일수 테이블 추가
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS pareto_settings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            days INTEGER DEFAULT 365,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
+    # 기본값 삽입 (없는 경우에만)
+    cursor.execute('''
+        INSERT OR IGNORE INTO pareto_settings (id, days) VALUES (1, 365)
+    ''')
+    
     conn.commit()
     conn.close()
 
@@ -299,15 +313,28 @@ def get_current_week_client_count(product):
     return result[0] if result else None 
 
 def reset_compare_products():
-    """모든 비교 상품 데이터를 삭제 (잘못된 날짜 형태 데이터 정리용)"""
+    """비교 상품 데이터 전체 삭제"""
     conn = sqlite3.connect('inventory.db')
     cursor = conn.cursor()
-    
     cursor.execute('DELETE FROM compare_products')
-    deleted_count = cursor.rowcount
-    
     conn.commit()
     conn.close()
-    
-    print(f"모든 비교 상품 데이터 삭제 완료: {deleted_count}개")
-    return deleted_count 
+
+def set_pareto_days(days):
+    """파레토 선택 기준 일수 저장"""
+    conn = sqlite3.connect('inventory.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        UPDATE pareto_settings SET days = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 1
+    ''', (days,))
+    conn.commit()
+    conn.close()
+
+def get_pareto_days():
+    """파레토 선택 기준 일수 불러오기"""
+    conn = sqlite3.connect('inventory.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT days FROM pareto_settings WHERE id = 1')
+    result = cursor.fetchone()
+    conn.close()
+    return result[0] if result else 365 

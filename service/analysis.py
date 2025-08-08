@@ -310,3 +310,83 @@ def get_product_stats(df, product_name, color_name=None):
         'product_current_stock': int(current_stock),
         'product_7days_sales': int(sales_7days)
     } 
+
+def get_pareto_products_date_specified(df, days):
+    """지정된 일수 기준 파레토 상품 목록 반환 (상품별)"""
+    if df.empty:
+        return []
+    
+    # 날짜 컬럼 변환
+    df['판매일자'] = pd.to_datetime(df['판매일자'])
+    
+    # 최신 날짜부터 지정된 일수만큼의 데이터만 필터링
+    latest_date = df['판매일자'].max()
+    start_date = latest_date - pd.Timedelta(days=days)
+    filtered_df = df[df['판매일자'] >= start_date]
+    
+    if filtered_df.empty:
+        return []
+    
+    # 상품별 판매량 집계 및 정렬
+    product_sales = filtered_df.groupby('품명')['실판매'].sum().sort_values(ascending=False)
+    total_sales = product_sales.sum()
+    
+    if total_sales == 0:
+        return []
+    
+    # 누적 비율 계산
+    cumulative_percentage = (product_sales.cumsum() / total_sales * 100)
+    
+    # 80% 기준으로 파레토 상품 선택
+    pareto_products = cumulative_percentage[cumulative_percentage <= 80].index.tolist()
+    return pareto_products
+
+def color_pareto_analysis_date_specified(df, days):
+    """지정된 일수 기준 컬러별 파레토 분석 - (상품명, 컬러명) 튜플 리스트 반환"""
+    if df.empty or '칼라' not in df.columns:
+        return []
+    
+    # 날짜 컬럼 변환
+    df['판매일자'] = pd.to_datetime(df['판매일자'])
+    
+    # 최신 날짜부터 지정된 일수만큼의 데이터만 필터링
+    latest_date = df['판매일자'].max()
+    start_date = latest_date - pd.Timedelta(days=days)
+    filtered_df = df[df['판매일자'] >= start_date]
+    
+    if filtered_df.empty:
+        return []
+    
+    # 상품-컬러 조합으로 판매량 집계
+    color_sales = filtered_df.groupby(['품명', '칼라'])['실판매'].sum().reset_index()
+    total_sales = color_sales['실판매'].sum()
+    
+    if total_sales == 0:
+        return []
+    
+    # 비율 계산
+    color_sales['비율'] = (color_sales['실판매'] / total_sales * 100).round(2)
+    
+    # 누적 비율 계산
+    color_sales = color_sales.sort_values('실판매', ascending=False)
+    color_sales['누적비율'] = color_sales['비율'].cumsum()
+    
+    # 80% 기준으로 파레토 상품-컬러 선택 (상품명, 컬러명 튜플로 반환)
+    pareto_color_products = color_sales[color_sales['누적비율'] <= 80][['품명', '칼라']].apply(tuple, axis=1).tolist()
+    return pareto_color_products
+
+def get_pareto_products_by_category_date_specified(df, days):
+    """지정된 일수 기준 상품별/컬러별 파레토 상품 목록 반환"""
+    if df.empty:
+        return {'products': [], 'colors': []}
+    
+    # 상품별 파레토 (지정된 일수 기준)
+    product_pareto = get_pareto_products_date_specified(df, days)
+    
+    # 컬러별 파레토 (지정된 일수 기준)
+    color_pareto = color_pareto_analysis_date_specified(df, days)
+    
+    return {
+        'products': product_pareto,
+        'colors': color_pareto
+    } 

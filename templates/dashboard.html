@@ -81,6 +81,32 @@
           <i class="fas fa-trash text-gray-500"></i>
           <span>DB 초기화</span>
         </a>
+        
+        <!-- 파레토 설정 -->
+        <div class="px-3 py-2">
+          <form method="post" class="space-y-2">
+            <input type="hidden" name="pareto_settings_form" value="1" />
+            <div class="flex items-center space-x-1">
+              <label class="text-xs text-gray-600 font-medium">파레토 기준:</label>
+              <input
+                type="number"
+                name="pareto_days"
+                min="1"
+                max="3650"
+                value="{{ pareto_days if pareto_days else 365 }}"
+                class="w-12 text-xs px-1 py-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                placeholder="일"
+              />
+              <span class="text-xs text-gray-500">일</span>
+              <button
+                type="submit"
+                class="text-xs px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+              >
+                설정
+              </button>
+            </div>
+          </form>
+        </div>
         {% if sidebar_products or sidebar_colors %}
         <div
           class="mt-6 overflow-y-auto"

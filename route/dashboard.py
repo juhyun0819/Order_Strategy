@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
-from service.db import load_from_db, save_to_db, delete_by_date, reset_db, init_clients_table, set_client_count, get_client_counts, init_weekly_clients_table, set_weekly_client_count, get_weekly_client_counts, get_current_week_client_count
-from service.analysis import generate_inventory_alerts, generate_a_grade_alerts, get_pareto_products, get_pareto_products_by_category, get_pareto_products_by_category_current_year, get_product_stats
+from service.db import load_from_db, save_to_db, delete_by_date, reset_db, init_clients_table, set_client_count, get_client_counts, init_weekly_clients_table, set_weekly_client_count, get_weekly_client_counts, get_current_week_client_count, set_pareto_days, get_pareto_days
+from service.analysis import generate_inventory_alerts, generate_a_grade_alerts, get_pareto_products, get_pareto_products_by_category, get_pareto_products_by_category_current_year, get_product_stats, get_pareto_products_by_category_date_specified, get_pareto_products_date_specified
 from service.visualization import create_visualizations
 from service.charts import create_weekly_sales_chart
 from datetime import datetime
@@ -87,6 +87,19 @@ def dashboard():
         else:
             compare_df, compare_filename = None, None
             print("비교상품 데이터 로드 실패 - result is None")
+    # 파레토 설정 저장 처리
+    if request.method == 'POST' and 'pareto_settings_form' in request.form:
+        try:
+            pareto_days = int(request.form.get('pareto_days', 365))
+            if pareto_days <= 0:
+                flash('파레토 선택 기준 일수는 1일 이상이어야 합니다.', 'error')
+            else:
+                set_pareto_days(pareto_days)
+                flash(f'파레토 선택 기준이 {pareto_days}일로 설정되었습니다.', 'success')
+        except ValueError:
+            flash('올바른 숫자를 입력해주세요.', 'error')
+        return redirect(url_for('dashboard.dashboard'))
+    
     elif request.method == 'POST':
         files = request.files.getlist('files')
         uploaded_count = 0
@@ -123,6 +136,9 @@ def dashboard():
     product_list = sorted(df['품명'].unique()) if not df.empty else []
     all_dates = sorted(pd.to_datetime(df['판매일자']).unique()) if not df.empty else []
     search_query = request.args.get('search', '')
+    
+    # 저장된 파레토 설정 일수 가져오기 (먼저 정의)
+    pareto_days = get_pareto_days()
     
     if selected_product and selected_product in product_list:
         # 컬러 필터링 적용
@@ -196,8 +212,8 @@ def dashboard():
         # 파레토 상품들에 대한 추세 알림 생성 (메인 대시보드용)
         trend_alerts = []
         if not filtered_df.empty:
-            # 파레토 상품들 가져오기
-            pareto_products = get_pareto_products(filtered_df)
+            # 파레토 상품들 가져오기 (저장된 일수 기준)
+            pareto_products = get_pareto_products_date_specified(filtered_df, pareto_days)
             
             for product in pareto_products[:10]:  # 상위 10개 파레토 상품만 분석
                 product_df = filtered_df[filtered_df['품명'] == product]
@@ -211,11 +227,11 @@ def dashboard():
                             alert['message'] = f"[{product}] {alert['message']}"
                         trend_alerts.extend(product_alerts)
         
-        # 파레토 컬러 상품-컬러 리스트 추출
+        # 파레토 컬러 상품-컬러 리스트 추출 (저장된 일수 기준)
         pareto_color_products = []
         if not filtered_df.empty:
-            from service.analysis import color_pareto_analysis_current_year
-            pareto_color_products = color_pareto_analysis_current_year(filtered_df)
+            from service.analysis import color_pareto_analysis_date_specified
+            pareto_color_products = color_pareto_analysis_date_specified(filtered_df, pareto_days)
         alert_rows = generate_inventory_alerts(filtered_df, pareto_color_products=pareto_color_products)
         alert_df = pd.DataFrame(alert_rows) if alert_rows else None
         a_grade_alert_rows = generate_a_grade_alerts(df)
@@ -233,8 +249,8 @@ def dashboard():
         # datetime 객체를 문자열로 변환
         unique_dates = sorted(df['판매일자'].dt.strftime('%Y-%m-%d').unique())
     
-    # 상품별/컬러별 파레토 상품 가져오기 (올해 기준)
-    pareto_data = get_pareto_products_by_category_current_year(df) if not df.empty else {'products': [], 'colors': []}
+    # 상품별/컬러별 파레토 상품 가져오기 (저장된 일수 기준)
+    pareto_data = get_pareto_products_by_category_date_specified(df, pareto_days) if not df.empty else {'products': [], 'colors': []}
     sidebar_products = pareto_data['products']
     sidebar_colors = pareto_data['colors']
     
@@ -261,7 +277,8 @@ def dashboard():
         current_client_count=current_client_count,
         current_week_client_count=current_week_client_count,
         compare_df=compare_df,
-        compare_filename=compare_filename
+        compare_filename=compare_filename,
+        pareto_days=pareto_days
     )
 
 @dashboard_bp.route('/dashboard/plot')
