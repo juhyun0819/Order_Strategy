@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify, send_file
 from service.db import load_from_db
 from service.analysis import pareto_analysis
+from service.column_validator import ColumnValidator  # 컬럼 검증 추가
 
 from datetime import timedelta
 import pandas as pd
@@ -18,6 +19,11 @@ def inventory_alerts():
         df = load_from_db()
         if df.empty:
             return jsonify({'alerts': []})
+        
+        # 컬럼 검증 추가
+        is_valid, missing_columns = ColumnValidator.validate_analysis_columns(df)
+        if not is_valid:
+            return jsonify({'error': f'필수 컬럼이 누락되었습니다: {", ".join(missing_columns)}'}), 400
         
         top_20_products, _, _ = pareto_analysis(df)
         
@@ -46,6 +52,12 @@ def inventory_alerts():
 def sales_forecast():
     try:
         df = load_from_db()
+        
+        # 컬럼 검증 추가
+        is_valid, missing_columns = ColumnValidator.validate_analysis_columns(df)
+        if not is_valid:
+            return jsonify({'error': f'필수 컬럼이 누락되었습니다: {", ".join(missing_columns)}'}), 400
+        
         product = request.args.get('product')
         if product:
             df = df[df['품명'] == product]
@@ -86,7 +98,13 @@ def product_trend():
     product = request.args.get('product', '')
     query = request.args.get('query', '')
     df = load_from_db()
-    if df.empty or '품명' not in df.columns or '판매일자' not in df.columns or '실판매' not in df.columns:
+    
+    # 컬럼 검증 추가
+    is_valid, missing_columns = ColumnValidator.validate_analysis_columns(df)
+    if not is_valid:
+        return jsonify({'error': f'필수 컬럼이 누락되었습니다: {", ".join(missing_columns)}'}), 400
+    
+    if df.empty:
         return jsonify({'error': '데이터 없음'}), 404
 
     # 유사 상품명 검색

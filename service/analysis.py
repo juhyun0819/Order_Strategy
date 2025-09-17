@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 from datetime import timedelta
 from service.trend_calculator import TrendCalculator  # 추가
+from service.column_validator import ColumnValidator  # 컬럼 검증 추가
 
 def pareto_analysis(df):
     """파레토 분석 - 상위 20% 상품 추출"""
@@ -100,6 +101,12 @@ def recent_7days_analysis(df):
 
 def generate_inventory_alerts(df, pareto_color_products=None):
     """재고 알림 생성 (파레토 상품-컬러만)"""
+    # 컬럼 검증 추가
+    is_valid, missing_columns = ColumnValidator.validate_analysis_columns(df)
+    if not is_valid:
+        print(f"경고: 분석에 필요한 컬럼이 누락되었습니다. 누락된 컬럼: {missing_columns}")
+        return []  # 빈 리스트 반환하여 오류 방지
+    
     alert_rows = []
     plot_products = []
     trend_calculator = TrendCalculator(window=7, frac=0.2)  # LOWESS 기반 중간선 계산기
@@ -176,6 +183,12 @@ def generate_inventory_alerts(df, pareto_color_products=None):
 
 def generate_a_grade_alerts(df):
     """A급 상품 알림 생성 (파레토 A급 + 소진임박)"""
+    # 컬럼 검증 추가
+    is_valid, missing_columns = ColumnValidator.validate_analysis_columns(df)
+    if not is_valid:
+        print(f"경고: A급 상품 분석에 필요한 컬럼이 누락되었습니다. 누락된 컬럼: {missing_columns}")
+        return []  # 빈 리스트 반환하여 오류 방지
+    
     # 파레토 A급 + 소진임박(7일 이하) 상품만 추출
     top_20_products, product_sales, cumulative_percentage = pareto_analysis(df)
     total_sales = product_sales.sum()

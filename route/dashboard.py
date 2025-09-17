@@ -3,6 +3,7 @@ from service.db import load_from_db, save_to_db, delete_by_date, reset_db, init_
 from service.analysis import generate_inventory_alerts, generate_a_grade_alerts, get_pareto_products, get_pareto_products_by_category, get_pareto_products_by_category_current_year, get_product_stats, get_pareto_products_by_category_date_specified, get_pareto_products_date_specified
 from service.visualization import create_visualizations
 from service.charts import create_weekly_sales_chart
+from service.column_validator import ColumnValidator  # 컬럼 검증 추가
 from datetime import datetime
 import pandas as pd
 import json
@@ -107,9 +108,12 @@ def dashboard():
             if file and file.filename.endswith(('xls', 'xlsx')):
                 try:
                     df = pd.read_excel(file)
-                    required_cols = {'품명', '칼라', '사이즈', '실판매', '현재고', '미송잔량'}
-                    if not required_cols.issubset(df.columns):
-                        flash(f'파일 {file.filename}: 필수 컬럼이 누락되었습니다.', 'error')
+                    
+                    # 컬럼 검증 개선
+                    is_valid, missing_columns = ColumnValidator.validate_required_columns(df)
+                    if not is_valid:
+                        error_message = ColumnValidator.get_missing_columns_message(missing_columns)
+                        flash(f'파일 {file.filename}: {error_message}', 'error')
                         continue
                     upload_date = datetime.now().strftime('%Y-%m-%d')
                     drop_cols = [col for col in df.columns if '실판매' in col and '금액' in col]
@@ -130,6 +134,14 @@ def dashboard():
     
     # 대시보드 렌더링 (GET)
     df = load_from_db()
+    
+    # 데이터베이스에서 로드된 데이터의 컬럼 검증
+    if not df.empty:
+        is_valid, missing_columns = ColumnValidator.validate_analysis_columns(df)
+        if not is_valid:
+            flash(f'데이터베이스에 저장된 데이터에 필수 컬럼이 누락되었습니다: {", ".join(missing_columns)}', 'error')
+            df = pd.DataFrame()  # 빈 데이터프레임으로 초기화
+    
     # '일반상품' 제외
     if not df.empty:
         df = df[df['품명'] != '(일반상품)']
