@@ -8,3 +8,4 @@ xlrd>=2.0.0
 fuzzywuzzy>=0.18.0
 python-Levenshtein>=0.21.0 
 statsmodels 
+xlrd>=2.0.0

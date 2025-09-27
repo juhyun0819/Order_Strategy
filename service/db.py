@@ -5,7 +5,8 @@ import re
 from datetime import datetime
 
 def extract_date_from_filename(filename):
-    """파일명에서 날짜 추출"""
+    """파일명에서 날짜 추출 (괄호나 다른 문자가 있어도 날짜 부분만 추출)"""
+    # YY.MM.DD 형식의 날짜 패턴을 찾되, 뒤에 괄호나 다른 문자가 있어도 매칭
     pattern = r'(\d{2})\.(\d{2})\.(\d{2})'
     match = re.search(pattern, filename)
     if match:

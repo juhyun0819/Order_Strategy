@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
-from service.db import load_from_db, save_to_db, delete_by_date, reset_db, init_clients_table, set_client_count, get_client_counts, init_weekly_clients_table, set_weekly_client_count, get_weekly_client_counts, get_current_week_client_count, set_pareto_days, get_pareto_days
+from service.db import load_from_db, save_to_db, delete_by_date, reset_db, init_clients_table, set_client_count, get_client_counts, init_weekly_clients_table, set_weekly_client_count, get_weekly_client_counts, get_current_week_client_count, set_pareto_days, get_pareto_days, extract_date_from_filename
 from service.analysis import generate_inventory_alerts, generate_a_grade_alerts, get_pareto_products, get_pareto_products_by_category, get_pareto_products_by_category_current_year, get_product_stats, get_pareto_products_by_category_date_specified, get_pareto_products_date_specified
 from service.visualization import create_visualizations
 from service.charts import create_weekly_sales_chart
@@ -108,6 +108,11 @@ def dashboard():
             if file and file.filename.endswith(('xls', 'xlsx')):
                 try:
                     df = pd.read_excel(file)
+                    
+                    # Unnamed 컬럼 제거 (빈 헤더 컬럼 처리)
+                    unnamed_cols = [col for col in df.columns if str(col).startswith('Unnamed')]
+                    if unnamed_cols:
+                        df = df.drop(columns=unnamed_cols)
                     
                     # 컬럼 검증 개선
                     is_valid, missing_columns = ColumnValidator.validate_required_columns(df)
@@ -313,18 +318,3 @@ def dashboard_plot():
             'product': product
         })
     return jsonify({'error': 'Invalid product'}), 400
-
-def extract_date_from_filename(filename):
-    """파일명에서 날짜 추출"""
-    import re
-    # 파일명에서 날짜 패턴 찾기 (YYYY-MM-DD 또는 YYYYMMDD)
-    date_pattern = r'(\d{4}[-_]\d{2}[-_]\d{2}|\d{8})'
-    match = re.search(date_pattern, filename)
-    if match:
-        date_str = match.group(1)
-        if '-' in date_str or '_' in date_str:
-            return date_str.replace('_', '-')
-        else:
-            # YYYYMMDD 형식을 YYYY-MM-DD로 변환
-            return f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}"
-    return "날짜 없음" 
