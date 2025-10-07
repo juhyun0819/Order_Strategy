@@ -2,6 +2,7 @@
 # 여성복 의류 도매 재고 관리 및 판매 분석 시스템
 
 from flask import Flask, session, redirect, url_for, request
+from datetime import timedelta
 from service.db import init_db
 from route.dashboard import dashboard_bp
 from route.admin import admin_bp
@@ -11,6 +12,7 @@ from route.auth import auth_bp
 # Flask 앱 생성
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-here'
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=12)
 
 # Blueprint 등록
 app.register_blueprint(auth_bp)

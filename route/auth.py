@@ -16,6 +16,7 @@ def login():
         password = request.form.get('password', '')
         expected = _get_app_password()
         if hmac.compare_digest(password, expected):
+            session.permanent = True
             session['authenticated'] = True
             flash('로그인되었습니다.', 'success')
             next_url = request.args.get('next') or url_for('dashboard.dashboard')
