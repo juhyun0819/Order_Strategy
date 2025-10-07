@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>로그인</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="bg-gray-50 min-h-screen flex items-center justify-center">
+    <div class="w-full max-w-sm bg-white rounded-xl shadow p-6">
+      <h1 class="text-xl font-semibold text-gray-900 mb-4">접속 비밀번호</h1>
+      {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+      {% for category, message in messages %}
+      <div class="text-sm mb-2 {{ 'text-red-600' if category == 'error' else 'text-green-600' }}">{{ message }}</div>
+      {% endfor %}
+      {% endif %}
+      {% endwith %}
+      <form method="post">
+        <label class="block text-sm text-gray-600 mb-1">비밀번호</label>
+        <input name="password" type="password" class="w-full border rounded px-3 py-2 mb-4" placeholder="비밀번호" required />
+        <button class="w-full bg-blue-600 hover:bg-blue-700 text-white rounded px-3 py-2">로그인</button>
+      </form>
+    </div>
+  </body>
+  </html>
+
+

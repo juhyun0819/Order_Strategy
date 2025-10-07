@@ -14,14 +14,14 @@ def delete_date():
             flash('삭제할 데이터가 없습니다.', 'warning')
     return redirect(url_for('dashboard.dashboard'))
 
-@admin_bp.route('/reset-db', methods=['POST'])
-def reset_database():
-    try:
-        reset_db()
-        flash('데이터베이스가 성공적으로 초기화되었습니다.', 'success')
-    except Exception as e:
-        flash(f'데이터베이스 초기화 중 오류가 발생했습니다: {str(e)}', 'error')
-    return redirect(url_for('dashboard.dashboard'))
+# @admin_bp.route('/reset-db', methods=['POST'])
+# def reset_database():
+#     try:
+#         reset_db()
+#         flash('데이터베이스가 성공적으로 초기화되었습니다.', 'success')
+#     except Exception as e:
+#         flash(f'데이터베이스 초기화 중 오류가 발생했습니다: {str(e)}', 'error')
+#     return redirect(url_for('dashboard.dashboard'))
 
 @admin_bp.route('/reset-compare-products', methods=['POST'])
 def reset_compare_products_route():
